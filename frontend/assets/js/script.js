@@ -4,47 +4,62 @@ let currentUser = null;
 let gameState = null;
 let currentGameId = null;
 let authCheckInterval = null;
-let isCheckingAuth = false; // AJOUTÉ: Empêche les vérifications multiples
+let isCheckingAuth = false;
+let turnTimer = null;
+let currentTurnTime = 15;
+
+// États du jeu
+const GAME_STATES = {
+    WAITING: 'waiting',
+    PLAYING: 'playing',
+    FINISHED: 'finished'
+};
+
+const CELL_TYPES = {
+    EMPTY: 'empty',
+    PLAYER1: 'player1',
+    PLAYER2: 'player2',
+    BONUS: 'bonus'
+};
+
+const POWER_TYPES = {
+    DOUBLE_PLACEMENT: 'double_placement',
+    SHIELD: 'shield',
+    EXPANSION_BOOST: 'expansion_boost'
+};
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🌌 Quantum Garden - Initialisation...');
+    console.log('🎯 Battle Dots - Initialisation...');
 
-    // Vérifier l'authentification UNE SEULE FOIS
     const isAuthenticated = await checkAuth();
 
     if (isAuthenticated) {
         console.log('✅ Utilisateur authentifié:', currentUser.username);
-
-        // Initialiser Socket.io et le jeu
         initializeSocket();
         initializeGame();
 
-        // Vérifier périodiquement l'auth SEULEMENT toutes les 10 minutes (pas 5!)
         authCheckInterval = setInterval(() => {
             if (!isCheckingAuth) {
                 checkAuth();
             }
-        }, 10 * 60 * 1000); // 10 minutes au lieu de 5
+        }, 10 * 60 * 1000);
     } else {
         console.log('❌ Utilisateur non authentifié, redirection...');
         redirectToLogin();
     }
 
-    // Event listeners
     setupEventListeners();
 });
 
-// Vérification authentification CORRIGÉE
+// Vérification authentification
 async function checkAuth() {
-    // AJOUTÉ: Empêche les appels multiples simultanés
     if (isCheckingAuth) {
         console.log('⏳ Vérification auth déjà en cours...');
         return currentUser !== null;
     }
 
     isCheckingAuth = true;
-
     const token = localStorage.getItem('token');
 
     if (!token) {
@@ -54,8 +69,6 @@ async function checkAuth() {
     }
 
     try {
-        console.log('🔍 Vérification du token...');
-
         const response = await fetch('/api/auth/verify', {
             method: 'GET',
             headers: {
@@ -63,8 +76,6 @@ async function checkAuth() {
                 'Content-Type': 'application/json'
             }
         });
-
-        console.log('📡 Réponse auth:', response.status);
 
         if (response.ok) {
             const data = await response.json();
@@ -74,30 +85,21 @@ async function checkAuth() {
             isCheckingAuth = false;
             return true;
         } else {
-            const errorData = await response.json().catch(() => ({}));
-            console.log('❌ Auth échouée:', response.status, errorData.message);
-
-            // SEULEMENT supprimer le token si c'est vraiment une erreur d'auth
             if (response.status === 401) {
                 localStorage.removeItem('token');
                 currentUser = null;
             }
-
             isCheckingAuth = false;
             return false;
         }
     } catch (error) {
         console.error('❌ Erreur vérification auth:', error);
-
-        // Ne PAS supprimer le token en cas d'erreur réseau
         isCheckingAuth = false;
-
-        // Si on a déjà un currentUser, on reste connecté
         return currentUser !== null;
     }
 }
 
-// Initialisation Socket.io CORRIGÉE
+// Initialisation Socket.io
 function initializeSocket() {
     if (socket) {
         socket.disconnect();
@@ -130,22 +132,29 @@ function initializeSocket() {
         updateConnectionStatus(false);
     });
 
-    // Events de jeu
+    // Events Battle Dots
     socket.on('waiting-for-opponent', handleWaitingForOpponent);
     socket.on('game-start', handleGameStart);
-    socket.on('cell-observed', handleCellObserved);
+    socket.on('dot-placed', handleDotPlaced);
+    socket.on('turn-changed', handleTurnChanged);
+    socket.on('expansion-occurred', handleExpansionOccurred);
+    socket.on('capture-occurred', handleCaptureOccurred);
+    socket.on('power-activated', handlePowerActivated);
     socket.on('game-end', handleGameEnd);
     socket.on('player-left', handlePlayerLeft);
     socket.on('player-disconnected', handlePlayerDisconnected);
+    socket.on('turn-timer', handleTurnTimer);
 }
 
-// Le reste du code reste identique...
+// Initialisation du jeu
 function initializeGame() {
-    console.log('🎮 Initialisation du jeu...');
+    console.log('🎯 Initialisation Battle Dots...');
     createGameBoard();
     updateUserInterface();
+    resetGameUI();
 }
 
+// Création du plateau de jeu
 function createGameBoard() {
     const gameBoard = document.getElementById('game-board');
     if (!gameBoard) {
@@ -155,70 +164,62 @@ function createGameBoard() {
 
     gameBoard.innerHTML = '';
 
-    for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
+    for (let i = 0; i < 10; i++) {
+        for (let j = 0; j < 10; j++) {
             const cell = document.createElement('div');
-            cell.className = 'cell superposition';
+            cell.className = 'cell empty';
             cell.dataset.x = i;
             cell.dataset.y = j;
 
-            cell.addEventListener('click', () => observeCell(i, j));
+            cell.addEventListener('click', () => placeDot(i, j));
 
             gameBoard.appendChild(cell);
         }
     }
 
-    console.log('✅ Grille de jeu créée (8x8)');
+    console.log('✅ Plateau Battle Dots créé (10x10)');
 }
 
-// Fonction observeCell AMÉLIORÉE avec plus de logs
-function observeCell(x, y) {
-    console.log(`🔍 Tentative observation cellule [${x}, ${y}]`);
+// Placement d'un dot
+function placeDot(x, y) {
+    console.log(`🎯 Tentative placement dot [${x}, ${y}]`);
 
     if (!currentGameId) {
-        console.log('❌ Pas de gameId actuel');
+        console.log('❌ Pas de partie en cours');
         showModal('Erreur', 'Aucune partie en cours!');
         return;
     }
 
-    if (!socket) {
-        console.log('❌ Socket non connecté');
+    if (!socket || !currentUser) {
+        console.log('❌ Socket ou utilisateur manquant');
         showModal('Erreur', 'Connexion requise!');
         return;
     }
 
-    if (!currentUser) {
-        console.log('❌ Utilisateur non connecté');
-        showModal('Erreur', 'Utilisateur non connecté!');
+    if (!gameState || gameState.currentPlayer !== currentUser.id) {
+        console.log('❌ Ce n\'est pas votre tour');
+        showModal('Info', 'Ce n\'est pas votre tour!');
         return;
     }
 
     const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
-    if (!cell) {
-        console.log(`❌ Cellule [${x}, ${y}] introuvable dans le DOM`);
+    if (!cell || !cell.classList.contains('empty')) {
+        console.log(`❌ Cellule [${x}, ${y}] non disponible`);
+        showModal('Info', 'Cette case n\'est pas disponible!');
         return;
     }
 
-    if (cell.classList.contains('collapsed')) {
-        console.log(`❌ Cellule [${x}, ${y}] déjà effondrée`);
-        showModal('Info', 'Cette cellule a déjà été observée!');
-        return;
-    }
-
-    console.log(`✅ Envoi observation [${x}, ${y}] vers serveur`);
-    console.log('📡 GameID:', currentGameId);
-    console.log('👤 PlayerID:', currentUser.id);
-
-    // Animation visuelle immédiate pour feedback
-    cell.style.border = '2px solid #00ff88';
-    cell.style.transform = 'scale(0.95)';
+    // Animation de placement immédiate
+    cell.style.transform = 'scale(0.8)';
+    cell.style.opacity = '0.7';
 
     setTimeout(() => {
-        cell.style.border = '';
         cell.style.transform = '';
-    }, 300);
+        cell.style.opacity = '';
+    }, 200);
 
-    socket.emit('observe-cell', {
+    console.log(`✅ Envoi placement dot [${x}, ${y}]`);
+    socket.emit('place-dot', {
         gameId: currentGameId,
         x: x,
         y: y,
@@ -226,13 +227,195 @@ function observeCell(x, y) {
     });
 }
 
+// Handlers des événements Socket.io
+function handleWaitingForOpponent(data) {
+    console.log('⏳ En attente d\'adversaire:', data);
+    const queuePosition = document.getElementById('queue-position');
+    if (queuePosition) {
+        queuePosition.textContent = data.queuePosition;
+    }
+    const waitingModal = document.getElementById('waiting-modal');
+    if (waitingModal) {
+        waitingModal.style.display = 'block';
+    }
+}
+
+function handleGameStart(data) {
+    console.log('🎯 Partie Battle Dots commencée!', data);
+    currentGameId = data.gameId;
+    gameState = data.gameState;
+
+    closeModal();
+    createGameBoardFromState(gameState);
+    updateGameInterface(gameState);
+    addGameLog('🎮 Partie Battle Dots commencée!');
+
+    showModal('Battle Dots!', 'La bataille pour le territoire commence!');
+    setTimeout(() => {
+        closeModal();
+    }, 2000);
+}
+
+function handleDotPlaced(data) {
+    console.log('🎯 Dot placé reçu:', data);
+
+    const { x, y, playerId, gameState: newGameState } = data;
+    const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+
+    if (!cell) {
+        console.error(`❌ Cellule [${x}, ${y}] introuvable`);
+        return;
+    }
+
+    const playerClass = playerId === gameState.players[0].id ? 'player1' : 'player2';
+    const playerName = gameState.players.find(p => p.id === playerId)?.playerName || 'Joueur';
+
+    cell.classList.remove('empty', 'bonus');
+    cell.classList.add(playerClass);
+    cell.textContent = '●';
+
+    // Animation de placement
+    cell.style.animation = 'expand-pulse 0.6s ease-out';
+    setTimeout(() => {
+        cell.style.animation = '';
+    }, 600);
+
+    gameState = newGameState;
+    updateGameInterface(gameState);
+    addGameLog(`${playerName} a placé un dot en [${x+1}, ${y+1}]`, playerClass);
+}
+
+function handleTurnChanged(data) {
+    console.log('🔄 Changement de tour:', data);
+    gameState = data.gameState;
+    updateGameInterface(gameState);
+    startTurnTimer();
+
+    const currentPlayerName = gameState.players.find(p => p.id === gameState.currentPlayer)?.playerName || 'Joueur';
+    const isMyTurn = gameState.currentPlayer === currentUser.id;
+
+    document.getElementById('current-turn-text').textContent =
+        isMyTurn ? 'À votre tour!' : `Tour de ${currentPlayerName}`;
+
+    addGameLog(`Tour de ${currentPlayerName}`);
+}
+
+function handleExpansionOccurred(data) {
+    console.log('💥 Expansion détectée:', data);
+    const { expansions, gameState: newGameState } = data;
+
+    expansions.forEach(expansion => {
+        const { x, y, playerId } = expansion;
+        const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+
+        if (cell) {
+            const playerClass = playerId === gameState.players[0].id ? 'player1' : 'player2';
+
+            cell.classList.remove('empty', 'bonus');
+            cell.classList.add(playerClass, 'expanding');
+            cell.textContent = '●';
+
+            setTimeout(() => {
+                cell.classList.remove('expanding');
+            }, 800);
+        }
+    });
+
+    gameState = newGameState;
+    updateGameInterface(gameState);
+    addGameLog(`💥 ${expansions.length} dots ont expansé!`);
+}
+
+function handleCaptureOccurred(data) {
+    console.log('🏆 Capture détectée:', data);
+    const { captures, gameState: newGameState } = data;
+
+    captures.forEach(capture => {
+        const { x, y, newPlayerId } = capture;
+        const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+
+        if (cell) {
+            const playerClass = newPlayerId === gameState.players[0].id ? 'player1' : 'player2';
+
+            cell.classList.add('captured');
+            setTimeout(() => {
+                cell.className = `cell ${playerClass}`;
+                cell.textContent = '●';
+            }, 300);
+        }
+    });
+
+    gameState = newGameState;
+    updateGameInterface(gameState);
+    addGameLog(`🏆 ${captures.length} dots capturés!`);
+}
+
+function handlePowerActivated(data) {
+    console.log('⚡ Pouvoir activé:', data);
+    const { playerId, powerType, gameState: newGameState } = data;
+
+    gameState = newGameState;
+    updateGameInterface(gameState);
+    updatePowersDisplay();
+
+    const playerName = gameState.players.find(p => p.id === playerId)?.playerName || 'Joueur';
+    const powerName = getPowerName(powerType);
+    addGameLog(`⚡ ${playerName} utilise ${powerName}!`);
+}
+
+function handleGameEnd(data) {
+    console.log('🏆 Partie terminée!', data);
+
+    const isWinner = data.winner === currentUser.id;
+    const winnerName = gameState.players.find(p => p.id === data.winner)?.playerName || 'Joueur';
+
+    let message;
+    if (data.reason === 'territory') {
+        message = isWinner ?
+            `🎉 Victoire! Vous contrôlez ${data.territoryPercentage}% du territoire!` :
+            `😞 Défaite. ${winnerName} contrôle ${data.territoryPercentage}% du territoire.`;
+    } else if (data.reason === 'elimination') {
+        message = isWinner ?
+            '🎉 Victoire! Vous avez éliminé tous les dots adverses!' :
+            '😞 Défaite. Tous vos dots ont été éliminés.';
+    } else {
+        message = isWinner ? '🎉 Victoire!' : '😞 Défaite.';
+    }
+
+    showModal('Fin de partie', message);
+    stopTurnTimer();
+    addGameLog(`🏆 ${winnerName} remporte la victoire!`);
+
+    currentGameId = null;
+    gameState = null;
+}
+
+function handlePlayerLeft(data) {
+    console.log('👋 Joueur parti:', data);
+    showModal('Joueur parti', 'Votre adversaire a quitté la partie. Vous gagnez par forfait!');
+    stopTurnTimer();
+    addGameLog('👋 L\'adversaire a quitté la partie');
+    currentGameId = null;
+    gameState = null;
+}
+
+function handlePlayerDisconnected(data) {
+    console.log('🔌 Joueur déconnecté:', data);
+    addGameLog(`🔌 ${data.playerName} s'est déconnecté`);
+}
+
+function handleTurnTimer(data) {
+    currentTurnTime = data.timeLeft;
+    updateTimerDisplay();
+}
+
+// Interface utilisateur
 function updateUserInterface() {
     if (currentUser) {
         const playerNameEl = document.getElementById('player-name');
         if (playerNameEl) {
             playerNameEl.textContent = currentUser.username;
         }
-        console.log('🔄 Interface mise à jour pour:', currentUser.username);
     }
 }
 
@@ -251,20 +434,209 @@ function updateConnectionStatus(connected) {
     }
 }
 
+function updateGameInterface(gameState) {
+    if (!gameState) return;
+
+    updateTerritoryDisplay(gameState);
+    updatePlayersDisplay(gameState.players);
+    updateTurnDisplay(gameState);
+    updatePowersDisplay();
+}
+
+function updateTerritoryDisplay(gameState) {
+    const totalCells = 100;
+    const player1Territory = gameState.territoryCount?.player1 || 0;
+    const player2Territory = gameState.territoryCount?.player2 || 0;
+
+    const player1Percentage = Math.round((player1Territory / totalCells) * 100);
+    const player2Percentage = Math.round((player2Territory / totalCells) * 100);
+
+    const player1Bar = document.getElementById('player1-territory');
+    const player2Bar = document.getElementById('player2-territory');
+    const player1Text = document.getElementById('player1-percentage');
+    const player2Text = document.getElementById('player2-percentage');
+
+    if (player1Bar && player2Bar && player1Text && player2Text) {
+        player1Bar.style.width = `${player1Percentage}%`;
+        player2Bar.style.width = `${player2Percentage}%`;
+        player1Text.textContent = `${player1Percentage}%`;
+        player2Text.textContent = `${player2Percentage}%`;
+    }
+}
+
+function updatePlayersDisplay(players) {
+    const playersList = document.getElementById('players-list');
+    const player1Name = document.getElementById('player1-name');
+    const player2Name = document.getElementById('player2-name');
+
+    if (!players || players.length < 2) return;
+
+    if (player1Name) player1Name.textContent = players[0].playerName;
+    if (player2Name) player2Name.textContent = players[1].playerName;
+
+    if (playersList) {
+        playersList.innerHTML = players.map(player => `
+            <div class="player-item">
+                <span class="player-name">${player.playerName}</span>
+                <span class="player-status">En ligne</span>
+            </div>
+        `).join('');
+    }
+}
+
+function updateTurnDisplay(gameState) {
+    const currentTurnText = document.getElementById('current-turn-text');
+    if (!currentTurnText) return;
+
+    const currentPlayerName = gameState.players.find(p => p.id === gameState.currentPlayer)?.playerName;
+    const isMyTurn = gameState.currentPlayer === currentUser.id;
+
+    currentTurnText.textContent = isMyTurn ?
+        'À votre tour!' :
+        `Tour de ${currentPlayerName}`;
+}
+
+function updatePowersDisplay() {
+    // Implémentation basique - à étendre selon les besoins
+    const powerItems = document.querySelectorAll('.power-item');
+    powerItems.forEach(item => {
+        item.classList.remove('active');
+        item.classList.add('disabled');
+    });
+}
+
+function startTurnTimer() {
+    stopTurnTimer();
+    currentTurnTime = 15;
+
+    turnTimer = setInterval(() => {
+        currentTurnTime--;
+        updateTimerDisplay();
+
+        if (currentTurnTime <= 0) {
+            stopTurnTimer();
+        }
+    }, 1000);
+}
+
+function stopTurnTimer() {
+    if (turnTimer) {
+        clearInterval(turnTimer);
+        turnTimer = null;
+    }
+}
+
+function updateTimerDisplay() {
+    const timerText = document.getElementById('timer-text');
+    const timerBar = document.getElementById('timer-bar');
+
+    if (timerText) {
+        timerText.textContent = currentTurnTime;
+    }
+
+    if (timerBar) {
+        const percentage = (currentTurnTime / 15) * 100;
+        timerBar.style.setProperty('--timer-width', `${percentage}%`);
+
+        if (currentTurnTime <= 5) {
+            timerBar.classList.add('danger');
+        } else if (currentTurnTime <= 10) {
+            timerBar.classList.add('warning');
+        } else {
+            timerBar.classList.remove('warning', 'danger');
+        }
+    }
+}
+
+function addGameLog(message, playerClass = '') {
+    const logContent = document.getElementById('game-log-content');
+    if (!logContent) return;
+
+    const logEntry = document.createElement('p');
+    logEntry.className = `log-entry ${playerClass}`.trim();
+    logEntry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+
+    logContent.appendChild(logEntry);
+    logContent.scrollTop = logContent.scrollHeight;
+
+    // Limiter à 50 entrées
+    while (logContent.children.length > 50) {
+        logContent.removeChild(logContent.firstChild);
+    }
+}
+
+function resetGameUI() {
+    document.getElementById('current-turn-text').textContent = 'En attente...';
+    document.getElementById('player1-percentage').textContent = '0%';
+    document.getElementById('player2-percentage').textContent = '0%';
+    document.getElementById('timer-text').textContent = '15';
+
+    const player1Bar = document.getElementById('player1-territory');
+    const player2Bar = document.getElementById('player2-territory');
+    if (player1Bar) player1Bar.style.width = '0%';
+    if (player2Bar) player2Bar.style.width = '0%';
+
+    const logContent = document.getElementById('game-log-content');
+    if (logContent) {
+        logContent.innerHTML = '<p class="log-entry">🎮 En attente d\'une partie...</p>';
+    }
+}
+
+function createGameBoardFromState(gameState) {
+    console.log('🎯 Création plateau depuis état serveur...');
+
+    if (!gameState || !gameState.grid) {
+        console.error('❌ Données de grille manquantes');
+        createGameBoard();
+        return;
+    }
+
+    const gameBoard = document.getElementById('game-board');
+    if (!gameBoard) return;
+
+    gameBoard.innerHTML = '';
+
+    for (let i = 0; i < 10; i++) {
+        for (let j = 0; j < 10; j++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.x = i;
+            cell.dataset.y = j;
+
+            const cellData = gameState.grid[i] && gameState.grid[i][j] ? gameState.grid[i][j] : null;
+
+            if (cellData) {
+                if (cellData.owner) {
+                    const playerClass = cellData.owner === gameState.players[0].id ? 'player1' : 'player2';
+                    cell.classList.add(playerClass);
+                    cell.textContent = '●';
+
+                    if (cellData.mature) {
+                        cell.classList.add('mature');
+                    }
+                } else if (cellData.type === 'bonus') {
+                    cell.classList.add('bonus');
+                    cell.textContent = '⚡';
+                } else {
+                    cell.classList.add('empty');
+                }
+            } else {
+                cell.classList.add('empty');
+            }
+
+            cell.addEventListener('click', () => placeDot(i, j));
+            gameBoard.appendChild(cell);
+        }
+    }
+
+    console.log('✅ Plateau créé avec état du serveur');
+}
+
+// Event listeners
 function setupEventListeners() {
     const newGameBtn = document.getElementById('new-game-btn');
     if (newGameBtn) {
         newGameBtn.addEventListener('click', startNewGame);
-    }
-
-    const saveGameBtn = document.getElementById('save-game-btn');
-    if (saveGameBtn) {
-        saveGameBtn.addEventListener('click', saveGame);
-    }
-
-    const loadGameBtn = document.getElementById('load-game-btn');
-    if (loadGameBtn) {
-        loadGameBtn.addEventListener('click', loadGame);
     }
 
     const helpBtn = document.getElementById('help-btn');
@@ -284,10 +656,10 @@ function setupEventListeners() {
         logoutBtn.addEventListener('click', logout);
     }
 
-    const modalClose = document.getElementById('modal-close');
-    if (modalClose) {
-        modalClose.addEventListener('click', closeModal);
-    }
+    const modalClose = document.querySelectorAll('.modal-close');
+    modalClose.forEach(close => {
+        close.addEventListener('click', closeModal);
+    });
 
     const cancelSearch = document.getElementById('cancel-search');
     if (cancelSearch) {
@@ -300,16 +672,18 @@ function setupEventListeners() {
         }
     });
 
-    console.log('✅ Event listeners configurés');
+    console.log('✅ Event listeners Battle Dots configurés');
 }
 
+// Fonctions d'action
 function startNewGame() {
     if (!socket || !currentUser) {
         showModal('Erreur', 'Connexion requise pour jouer!');
         return;
     }
 
-    console.log('🎮 Démarrage nouvelle partie...');
+    console.log('🎯 Démarrage nouvelle partie Battle Dots...');
+    resetGameUI();
 
     socket.emit('join-game', {
         playerId: currentUser.id,
@@ -317,187 +691,19 @@ function startNewGame() {
     });
 }
 
-// Handlers des événements Socket.io
-function handleWaitingForOpponent(data) {
-    console.log('⏳ En attente d\'adversaire:', data);
-    const queuePosition = document.getElementById('queue-position');
-    if (queuePosition) {
-        queuePosition.textContent = data.queuePosition;
-    }
-    const waitingModal = document.getElementById('waiting-modal');
-    if (waitingModal) {
-        waitingModal.style.display = 'block';
-    }
-}
-
-// Handler amélioré pour le début de partie
-function handleGameStart(data) {
-    console.log('🎮 Partie commencée!', data);
-    currentGameId = data.gameId;
-    gameState = data.gameState;
-
-    // Fermer toutes les modals
-    closeModal();
-
-    // IMPORTANT: Recréer la grille de jeu avec les données du serveur
-    createGameBoardFromState(gameState);
-
-    // Mettre à jour l'interface
-    updateObjectives(gameState.objectives);
-    updatePlayersList(gameState.players);
-
-    // Afficher le message de début brièvement
-    showModal('Partie commencée!', 'La partie Quantum Garden a commencé!');
-
-    // Fermer automatiquement le modal après 2 secondes
-    setTimeout(() => {
-        closeModal();
-    }, 2000);
-}
-
-// NOUVELLE FONCTION: Créer la grille basée sur l'état du serveur
-function createGameBoardFromState(gameState) {
-    console.log('🎮 Création grille depuis état serveur...');
-
-    const gameBoard = document.getElementById('game-board');
-    if (!gameBoard) {
-        console.error('❌ Élément game-board introuvable');
-        return;
-    }
-
-    // Nettoyer la grille existante
-    gameBoard.innerHTML = '';
-
-    // Vérifier que nous avons les données de grille
-    if (!gameState || !gameState.grid) {
-        console.error('❌ Données de grille manquantes');
-        // Créer une grille par défaut
-        createGameBoard();
-        return;
-    }
-
-    console.log('📊 Grille serveur:', gameState.grid.length, 'x', gameState.grid[0]?.length);
-
-    // Créer les cellules basées sur l'état du serveur
-    for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-            const cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.dataset.x = i;
-            cell.dataset.y = j;
-
-            // Récupérer les données de la cellule du serveur
-            const cellData = gameState.grid[i] && gameState.grid[i][j] ? gameState.grid[i][j] : null;
-
-            if (cellData) {
-                if (cellData.collapsed) {
-                    cell.classList.add('collapsed', cellData.type);
-                    console.log(`📍 Cellule [${i},${j}] effondrée: ${cellData.type}`);
-                } else {
-                    cell.classList.add('superposition');
-                }
-            } else {
-                // État par défaut si pas de données
-                cell.classList.add('superposition');
-            }
-
-            // IMPORTANT: Ajouter l'event listener pour chaque cellule
-            cell.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                console.log(`👆 Clic sur cellule [${i},${j}]`);
-                observeCell(i, j);
-            });
-
-            // Ajouter la cellule au plateau
-            gameBoard.appendChild(cell);
-        }
-    }
-
-    console.log('✅ Grille créée avec', gameBoard.children.length, 'cellules interactives');
-}
-
-// Handler amélioré pour les cellules observées
-function handleCellObserved(data) {
-    console.log('👁️ Cellule observée reçue du serveur:', data);
-
-    if (!data.position || data.position.x === undefined || data.position.y === undefined) {
-        console.error('❌ Position manquante dans les données');
-        return;
-    }
-
-    const { x, y } = data.position;
-    const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
-
-    if (!cell) {
-        console.error(`❌ Cellule [${x}, ${y}] introuvable pour mise à jour`);
-        return;
-    }
-
-    console.log(`✨ Mise à jour cellule [${x}, ${y}] -> ${data.newState}`);
-
-    // Retirer l'état de superposition
-    cell.classList.remove('superposition');
-
-    // Ajouter l'état effondré
-    cell.classList.add('collapsed', data.newState);
-
-    // Animation quantique
-    cell.style.animation = 'quantum-collapse 0.5s ease-out';
-
-    setTimeout(() => {
-        cell.style.animation = '';
-    }, 500);
-
-    // Mettre à jour l'état du jeu
-    if (data.gameState) {
-        gameState = data.gameState;
-        console.log('🔄 État de jeu mis à jour');
-
-        // Vérifier s'il y a des objectifs atteints
-        updateObjectives(gameState.objectives);
-    }
-}
-
-function handleGameEnd(data) {
-    console.log('🏆 Partie terminée!', data);
-
-    const isWinner = data.winner === currentUser.id;
-    const message = isWinner ?
-        '🎉 Félicitations! Vous avez gagné!' :
-        '😞 Partie terminée. Votre adversaire a gagné.';
-
-    showModal('Fin de partie', message);
-
-    recordGameResult(isWinner);
-
-    currentGameId = null;
-    gameState = null;
-}
-
-function handlePlayerLeft(data) {
-    console.log('👋 Joueur parti:', data);
-    showModal('Joueur parti', 'Votre adversaire a quitté la partie.');
-    currentGameId = null;
-    gameState = null;
-}
-
-function handlePlayerDisconnected(data) {
-    console.log('🔌 Joueur déconnecté:', data);
-    showModal('Déconnexion', `${data.playerId} s'est déconnecté.`);
-}
-
-// Déconnexion CORRIGÉE
 function logout() {
     console.log('👋 Déconnexion...');
 
-    // IMPORTANT: Nettoyer l'interval AVANT de supprimer le token
     if (authCheckInterval) {
         clearInterval(authCheckInterval);
         authCheckInterval = null;
     }
 
-    // Marquer qu'on ne vérifie plus l'auth
+    if (turnTimer) {
+        clearInterval(turnTimer);
+        turnTimer = null;
+    }
+
     isCheckingAuth = false;
 
     if (socket) {
@@ -507,21 +713,23 @@ function logout() {
 
     localStorage.removeItem('token');
     currentUser = null;
-
     redirectToLogin();
 }
 
 function redirectToLogin() {
     console.log('🔄 Redirection vers login...');
 
-    // S'assurer qu'on nettoie tout avant la redirection
     if (authCheckInterval) {
         clearInterval(authCheckInterval);
         authCheckInterval = null;
     }
 
-    isCheckingAuth = false;
+    if (turnTimer) {
+        clearInterval(turnTimer);
+        turnTimer = null;
+    }
 
+    isCheckingAuth = false;
     window.location.href = '/login';
 }
 
@@ -551,139 +759,6 @@ function cancelSearchGame() {
     closeModal();
 }
 
-// Correction de la fonction updateGameBoard
-function updateGameBoard(gameState) {
-    if (!gameState || !gameState.grid) {
-        console.log('❌ Pas de données de grille à mettre à jour');
-        return;
-    }
-
-    console.log('🔄 Mise à jour complète du plateau');
-
-    for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-            const cell = document.querySelector(`[data-x="${i}"][data-y="${j}"]`);
-            const cellData = gameState.grid[i] && gameState.grid[i][j] ? gameState.grid[i][j] : null;
-
-            if (cell && cellData) {
-                // Nettoyer toutes les classes
-                cell.className = 'cell';
-
-                if (cellData.collapsed) {
-                    cell.classList.add('collapsed', cellData.type);
-                } else {
-                    cell.classList.add('superposition');
-                }
-            }
-        }
-    }
-}
-
-function updateObjectives(objectives) {
-    if (!objectives) return;
-
-    const flowersEl = document.getElementById('flowers-needed');
-    const treesEl = document.getElementById('trees-needed');
-    const crystalsEl = document.getElementById('crystals-needed');
-
-    if (flowersEl) flowersEl.textContent = objectives.flowers;
-    if (treesEl) treesEl.textContent = objectives.trees;
-    if (crystalsEl) crystalsEl.textContent = objectives.crystals;
-}
-
-// Fonction pour débugger l'état actuel
-function debugGameState() {
-    console.log('🔍 DEBUG - État du jeu:');
-    console.log('GameID actuel:', currentGameId);
-    console.log('Socket connecté:', socket ? socket.connected : 'Non');
-    console.log('Utilisateur:', currentUser);
-    console.log('État de jeu:', gameState);
-
-    const cells = document.querySelectorAll('.cell');
-    console.log('Cellules dans le DOM:', cells.length);
-
-    cells.forEach((cell, index) => {
-        if (index < 5) { // Log seulement les 5 premières
-            console.log(`Cellule [${cell.dataset.x}, ${cell.dataset.y}]:`, cell.className);
-        }
-    });
-}
-
-// Ajouter un raccourci clavier pour debug
-document.addEventListener('keydown', (event) => {
-    if (event.ctrlKey && event.key === 'd') {
-        event.preventDefault();
-        debugGameState();
-    }
-});
-
-
-function updatePlayersList(players) {
-    const playersList = document.getElementById('players-list');
-    if (!players || !playersList) return;
-
-    playersList.innerHTML = players.map(player =>
-        `<div class="player-item">
-            <span class="player-name">${player.playerName}</span>
-            <span class="player-status">En ligne</span>
-        </div>`
-    ).join('');
-}
-
-async function saveGame() {
-    if (!gameState) {
-        showModal('Erreur', 'Aucune partie en cours à sauvegarder!');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/game/save', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ gameData: gameState })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            showModal('Succès', 'Partie sauvegardée avec succès!');
-        } else {
-            showModal('Erreur', data.message || 'Erreur lors de la sauvegarde');
-        }
-    } catch (error) {
-        console.error('Erreur sauvegarde:', error);
-        showModal('Erreur', 'Erreur lors de la sauvegarde');
-    }
-}
-
-async function loadGame() {
-    try {
-        const response = await fetch('/api/game/load', {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            gameState = data.gameData;
-            updateGameBoard(gameState);
-            showModal('Succès', 'Partie chargée avec succès!');
-        } else {
-            showModal('Erreur', data.message || 'Aucune sauvegarde trouvée');
-        }
-    } catch (error) {
-        console.error('Erreur chargement:', error);
-        showModal('Erreur', 'Erreur lors du chargement');
-    }
-}
-
-
-
 function showHelp() {
     const helpModal = document.getElementById('help-modal');
     if (helpModal) {
@@ -691,28 +766,26 @@ function showHelp() {
     }
 }
 
-async function recordGameResult(isWinner) {
-    try {
-        const endpoint = isWinner ? '/api/game/win' : '/api/game/loss';
-        await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-    } catch (error) {
-        console.error('Erreur enregistrement résultat:', error);
+function getPowerName(powerType) {
+    switch (powerType) {
+        case POWER_TYPES.DOUBLE_PLACEMENT: return 'Double Placement';
+        case POWER_TYPES.SHIELD: return 'Bouclier';
+        case POWER_TYPES.EXPANSION_BOOST: return 'Boost d\'Expansion';
+        default: return 'Pouvoir';
     }
 }
 
-// Nettoyage à la fermeture de la page
+// Nettoyage à la fermeture
 window.addEventListener('beforeunload', () => {
     if (authCheckInterval) {
         clearInterval(authCheckInterval);
+    }
+    if (turnTimer) {
+        clearInterval(turnTimer);
     }
     if (socket) {
         socket.disconnect();
     }
 });
 
-console.log('🌌 Quantum Garden - Script principal chargé!');
+console.log('🎯 Battle Dots - Script principal chargé!');

@@ -35,7 +35,7 @@ app.use('/api/', limiter);
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/quantum-garden', {
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/battle-dots', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -60,220 +60,643 @@ app.get('/profile', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/profile.html'));
 });
 
-// Active games management
+// Battle Dots Game Management
 let activeGames = new Map();
 let connectedPlayers = new Map();
 let gameQueue = [];
 
-class QuantumGarden {
+class BattleDots {
   constructor(gameId, players) {
     this.gameId = gameId;
     this.players = players;
     this.grid = this.initializeGrid();
     this.currentPlayer = 0;
-    this.level = 1;
-    this.objectives = this.generateObjectives();
+    this.turnCount = 0;
     this.gameState = 'playing';
-    this.quantumStates = new Map();
+    this.territoryCount = { player1: 0, player2: 0 };
+    this.turnTimer = null;
+    this.turnTimeLimit = 15000; // 15 secondes
+    this.dotsToExpand = new Map(); // Dots en attente d'expansion
   }
 
   initializeGrid() {
     const grid = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       grid[i] = [];
-      for (let j = 0; j < 8; j++) {
+      for (let j = 0; j < 10; j++) {
         grid[i][j] = {
+          owner: null,
           type: 'empty',
-          quantumState: 'superposition',
-          possibleStates: ['flower', 'tree', 'crystal'],
-          collapsed: false,
-          energy: Math.random() * 100
+          placedTurn: null,
+          mature: false
         };
       }
     }
+
+    // Ajouter quelques cases bonus aléatoires
+    this.addBonusCells(grid);
     return grid;
   }
 
-  generateObjectives() {
-    return {
-      flowers: Math.floor(Math.random() * 5) + 3,
-      trees: Math.floor(Math.random() * 3) + 2,
-      crystals: Math.floor(Math.random() * 2) + 1,
-      patterns: this.generatePatterns()
-    };
+  addBonusCells(grid) {
+    const bonusCount = 8; // 8 cases bonus sur 100
+    const bonusPositions = new Set();
+
+    while (bonusPositions.size < bonusCount) {
+      const x = Math.floor(Math.random() * 10);
+      const y = Math.floor(Math.random() * 10);
+      const pos = `${x},${y}`;
+
+      if (!bonusPositions.has(pos)) {
+        bonusPositions.add(pos);
+        grid[x][y].type = 'bonus';
+        grid[x][y].bonusType = this.getRandomBonusType();
+      }
+    }
   }
 
-  generatePatterns() {
-    const patterns = ['line', 'square', 'triangle', 'cross'];
-    return patterns[Math.floor(Math.random() * patterns.length)];
+  getRandomBonusType() {
+    const types = ['double_placement', 'shield', 'expansion_boost'];
+    return types[Math.floor(Math.random() * types.length)];
   }
 
-  observeCell(x, y, playerId) {
-    if (this.grid[x] && this.grid[x][y] && !this.grid[x][y].collapsed) {
-      const cell = this.grid[x][y];
+  placeDot(x, y, playerId) {
+    if (this.gameState !== 'playing') {
+      return { success: false, message: 'Partie terminée' };
+    }
 
-      const chosenState = cell.possibleStates[Math.floor(Math.random() * cell.possibleStates.length)];
+    if (this.players[this.currentPlayer].id !== playerId) {
+      return { success: false, message: 'Ce n\'est pas votre tour' };
+    }
 
-      cell.type = chosenState;
-      cell.collapsed = true;
-      cell.quantumState = 'collapsed';
+    if (!this.isValidPosition(x, y)) {
+      return { success: false, message: 'Position invalide' };
+    }
 
-      this.applyQuantumEntanglement(x, y);
+    if (this.grid[x][y].owner !== null) {
+      return { success: false, message: 'Case déjà occupée' };
+    }
 
+    // Placer le dot
+    this.grid[x][y].owner = playerId;
+    this.grid[x][y].placedTurn = this.turnCount;
+    this.grid[x][y].mature = false;
+
+    // Gérer les cases bonus
+    if (this.grid[x][y].type === 'bonus') {
+      this.activateBonus(playerId, this.grid[x][y].bonusType);
+      this.grid[x][y].type = 'normal';
+    }
+
+    // Programmer l'expansion pour dans 3 tours
+    const expandTurn = this.turnCount + 3;
+    if (!this.dotsToExpand.has(expandTurn)) {
+      this.dotsToExpand.set(expandTurn, []);
+    }
+    this.dotsToExpand.get(expandTurn).push({ x, y, playerId });
+
+    // Passer au joueur suivant
+    this.currentPlayer = (this.currentPlayer + 1) % 2;
+    this.turnCount++;
+
+    // Vérifier les expansions à effectuer
+    this.processExpansions();
+
+    // Mettre à jour le comptage des territoires
+    this.updateTerritoryCount();
+
+    // Vérifier les conditions de victoire
+    const winner = this.checkWinCondition();
+    if (winner) {
+      this.gameState = 'finished';
       return {
         success: true,
-        newState: chosenState,
-        position: { x, y },
-        playerId: playerId
+        gameEnded: true,
+        winner: winner.playerId,
+        reason: winner.reason,
+        territoryPercentage: winner.percentage
       };
     }
-    return { success: false };
+
+    return { success: true };
   }
 
-  applyQuantumEntanglement(x, y) {
-    const neighbors = [
-      [x-1, y], [x+1, y], [x, y-1], [x, y+1],
-      [x-1, y-1], [x-1, y+1], [x+1, y-1], [x+1, y+1]
-    ];
+  processExpansions() {
+    if (!this.dotsToExpand.has(this.turnCount)) {
+      return { expansions: [], captures: [] };
+    }
 
-    neighbors.forEach(([nx, ny]) => {
-      if (this.grid[nx] && this.grid[nx][ny] && !this.grid[nx][ny].collapsed) {
-        this.grid[nx][ny].energy += Math.random() * 20 - 10;
-        if (Math.random() < 0.3) {
-          this.grid[nx][ny].possibleStates.splice(Math.floor(Math.random() * this.grid[nx][ny].possibleStates.length), 1);
-          if (this.grid[nx][ny].possibleStates.length === 0) {
-            this.grid[nx][ny].possibleStates = ['empty'];
+    const expansions = [];
+    const captures = [];
+    const dotsToExpand = this.dotsToExpand.get(this.turnCount);
+
+    dotsToExpand.forEach(({ x, y, playerId }) => {
+      // Marquer le dot comme mature
+      if (this.grid[x] && this.grid[x][y] && this.grid[x][y].owner === playerId) {
+        this.grid[x][y].mature = true;
+
+        // Expansion vers les cases adjacentes vides
+        const neighbors = this.getNeighbors(x, y);
+        neighbors.forEach(({ nx, ny }) => {
+          if (this.grid[nx][ny].owner === null && this.grid[nx][ny].type !== 'bonus') {
+            this.grid[nx][ny].owner = playerId;
+            this.grid[nx][ny].placedTurn = this.turnCount;
+            this.grid[nx][ny].mature = false;
+            expansions.push({ x: nx, y: ny, playerId });
+
+            // Programmer cette expansion pour dans 3 tours
+            const expandTurn = this.turnCount + 3;
+            if (!this.dotsToExpand.has(expandTurn)) {
+              this.dotsToExpand.set(expandTurn, []);
+            }
+            this.dotsToExpand.get(expandTurn).push({ x: nx, y: ny, playerId });
+          }
+        });
+      }
+    });
+
+    // Supprimer les dots expansés de la liste d'attente
+    this.dotsToExpand.delete(this.turnCount);
+
+    // Vérifier les captures après expansion
+    const allCaptures = this.checkCaptures();
+    captures.push(...allCaptures);
+
+    return { expansions, captures };
+  }
+
+  checkCaptures() {
+    const captures = [];
+    const visited = new Set();
+
+    for (let i = 0; i < 10; i++) {
+      for (let j = 0; j < 10; j++) {
+        const pos = `${i},${j}`;
+        if (!visited.has(pos) && this.grid[i][j].owner !== null) {
+          const group = this.findConnectedGroup(i, j, this.grid[i][j].owner, visited);
+
+          if (this.isGroupSurrounded(group, this.grid[i][j].owner)) {
+            // Ce groupe est entouré, capturer tous ses dots
+            group.forEach(({ x, y }) => {
+              const enemyId = this.getEnemyId(this.grid[x][y].owner);
+              this.grid[x][y].owner = enemyId;
+              captures.push({ x, y, newPlayerId: enemyId });
+            });
           }
         }
       }
+    }
+
+    return captures;
+  }
+  
+findConnectedGroup(startX, startY, playerId, visited) {
+  const group = [];
+  const queue = [{ x: startX, y: startY }];
+  const localVisited = new Set();
+
+  while (queue.length > 0) {
+    const { x, y } = queue.shift();
+    const pos = `${x},${y}`;
+
+    if (localVisited.has(pos) || visited.has(pos)) continue;
+    if (!this.isValidPosition(x, y)) continue;
+    if (this.grid[x][y].owner !== playerId) continue;
+
+    localVisited.add(pos);
+    visited.add(pos);
+    group.push({ x, y });
+
+    // Ajouter les voisins à la queue
+    const neighbors = this.getNeighbors(x, y);
+    neighbors.forEach(({ nx, ny }) => {
+      queue.push({ x: nx, y: ny });
     });
   }
 
-  checkWinCondition() {
-    const counts = { flower: 0, tree: 0, crystal: 0 };
+  return group;
+}
 
-    for (let i = 0; i < 8; i++) {
-      for (let j = 0; j < 8; j++) {
-        if (this.grid[i][j].collapsed) {
-          counts[this.grid[i][j].type]++;
-        }
+isGroupSurrounded(group, playerId) {
+  const enemyId = this.getEnemyId(playerId);
+
+  for (const { x, y } of group) {
+    const neighbors = this.getNeighbors(x, y);
+
+    for (const { nx, ny } of neighbors) {
+      if (!this.isValidPosition(nx, ny)) {
+        // Bord de la grille compte comme non-entouré
+        return false;
+      }
+
+      if (this.grid[nx][ny].owner === null || this.grid[nx][ny].owner === playerId) {
+        // Case vide ou alliée = pas entouré
+        return false;
       }
     }
-
-    return counts.flower >= this.objectives.flowers &&
-           counts.tree >= this.objectives.trees &&
-           counts.crystal >= this.objectives.crystals;
   }
 
-  getGameState() {
+  return true; // Complètement entouré par l'ennemi
+}
+
+getEnemyId(playerId) {
+  return this.players[0].id === playerId ? this.players[1].id : this.players[0].id;
+}
+
+getNeighbors(x, y) {
+  const neighbors = [];
+  const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // Haut, Bas, Gauche, Droite
+
+  directions.forEach(([dx, dy]) => {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (this.isValidPosition(nx, ny)) {
+      neighbors.push({ nx, ny });
+    }
+  });
+
+  return neighbors;
+}
+
+isValidPosition(x, y) {
+  return x >= 0 && x < 10 && y >= 0 && y < 10;
+}
+
+activateBonus(playerId, bonusType) {
+  // Implémentation basique des bonus
+  console.log(`⚡ Bonus ${bonusType} activé pour ${playerId}`);
+  // TODO: Implémenter les effets des bonus
+}
+
+updateTerritoryCount() {
+  let player1Count = 0;
+  let player2Count = 0;
+
+  for (let i = 0; i < 10; i++) {
+    for (let j = 0; j < 10; j++) {
+      const owner = this.grid[i][j].owner;
+      if (owner === this.players[0].id) {
+        player1Count++;
+      } else if (owner === this.players[1].id) {
+        player2Count++;
+      }
+    }
+  }
+
+  this.territoryCount = {
+    player1: player1Count,
+    player2: player2Count
+  };
+}
+
+checkWinCondition() {
+  const totalCells = 100;
+  const player1Territory = this.territoryCount.player1;
+  const player2Territory = this.territoryCount.player2;
+
+  // Victoire par contrôle de territoire (60%)
+  if (player1Territory >= 60) {
     return {
-      gameId: this.gameId,
-      grid: this.grid,
-      players: this.players,
-      currentPlayer: this.currentPlayer,
-      level: this.level,
-      objectives: this.objectives,
-      gameState: this.gameState
+      playerId: this.players[0].id,
+      reason: 'territory',
+      percentage: Math.round((player1Territory / totalCells) * 100)
     };
   }
+
+  if (player2Territory >= 60) {
+    return {
+      playerId: this.players[1].id,
+      reason: 'territory',
+      percentage: Math.round((player2Territory / totalCells) * 100)
+    };
+  }
+
+  // Victoire par élimination (adversaire n'a plus de dots)
+  if (player1Territory > 0 && player2Territory === 0) {
+    return {
+      playerId: this.players[0].id,
+      reason: 'elimination',
+      percentage: 100
+    };
+  }
+
+  if (player2Territory > 0 && player1Territory === 0) {
+    return {
+      playerId: this.players[1].id,
+      reason: 'elimination',
+      percentage: 100
+    };
+  }
+
+  return null; // Pas de gagnant encore
+}
+
+getCurrentPlayerData() {
+  return {
+    gameId: this.gameId,
+    gameState: {
+      grid: this.grid,
+      currentPlayer: this.players[this.currentPlayer].id,
+      players: this.players,
+      turnCount: this.turnCount,
+      territoryCount: this.territoryCount,
+      gameState: this.gameState
+    }
+  };
+}
+
+startTurnTimer(io) {
+  this.clearTurnTimer();
+
+  let timeLeft = 15;
+  this.turnTimer = setInterval(() => {
+    timeLeft--;
+
+    // Broadcast du timer à tous les joueurs de cette partie
+    this.players.forEach(player => {
+      const socket = connectedPlayers.get(player.id);
+      if (socket) {
+        socket.emit('turn-timer', { timeLeft });
+      }
+    });
+
+    if (timeLeft <= 0) {
+      this.clearTurnTimer();
+      this.handleTurnTimeout(io);
+    }
+  }, 1000);
+}
+
+clearTurnTimer() {
+  if (this.turnTimer) {
+    clearInterval(this.turnTimer);
+    this.turnTimer = null;
+  }
+}
+
+handleTurnTimeout(io) {
+  console.log(`⏰ Timeout pour le joueur ${this.players[this.currentPlayer].id}`);
+
+  // Passer au joueur suivant
+  this.currentPlayer = (this.currentPlayer + 1) % 2;
+  this.turnCount++;
+
+  // Traiter les expansions
+  const { expansions, captures } = this.processExpansions();
+
+  // Broadcast des changements
+  this.broadcastToPlayers(io, 'turn-changed', this.getCurrentPlayerData());
+
+  if (expansions.length > 0) {
+    this.broadcastToPlayers(io, 'expansion-occurred', {
+      expansions,
+      gameState: this.getCurrentPlayerData().gameState
+    });
+  }
+
+  if (captures.length > 0) {
+    this.broadcastToPlayers(io, 'capture-occurred', {
+      captures,
+      gameState: this.getCurrentPlayerData().gameState
+    });
+  }
+
+  // Démarrer le timer pour le prochain joueur
+  this.startTurnTimer(io);
+}
+
+broadcastToPlayers(io, event, data) {
+  this.players.forEach(player => {
+    const socket = connectedPlayers.get(player.id);
+    if (socket) {
+      socket.emit(event, data);
+    }
+  });
+}
 }
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
+console.log('🔌 Nouvelle connexion socket:', socket.id);
 
-  socket.on('join-game', (data) => {
+socket.on('join-game', async (data) => {
+  try {
     const { playerId, playerName } = data;
-    connectedPlayers.set(socket.id, { playerId, playerName, socketId: socket.id });
 
-    gameQueue.push({ playerId, playerName, socketId: socket.id });
+    console.log(`🎯 ${playerName} rejoint la queue`);
+
+    // Ajouter le joueur à la liste des connectés
+    connectedPlayers.set(playerId, socket);
+    socket.playerId = playerId;
+    socket.playerName = playerName;
+
+    // Ajouter à la queue
+    gameQueue.push({ playerId, playerName, socket });
 
     if (gameQueue.length >= 2) {
+      // Créer une nouvelle partie avec les 2 premiers joueurs
       const player1 = gameQueue.shift();
       const player2 = gameQueue.shift();
 
       const gameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const game = new QuantumGarden(gameId, [player1, player2]);
+      const players = [
+        { id: player1.playerId, playerName: player1.playerName },
+        { id: player2.playerId, playerName: player2.playerName }
+      ];
 
+      const game = new BattleDots(gameId, players);
       activeGames.set(gameId, game);
 
-      io.sockets.sockets.get(player1.socketId)?.join(gameId);
-      io.sockets.sockets.get(player2.socketId)?.join(gameId);
+      // Assigner les sockets aux rooms
+      player1.socket.join(gameId);
+      player2.socket.join(gameId);
 
-      io.to(gameId).emit('game-start', {
-        gameId: gameId,
-        gameState: game.getGameState(),
-        message: 'Quantum Garden game started!'
-      });
+      console.log(`🎮 Nouvelle partie Battle Dots créée: ${gameId}`);
 
-      console.log(`Game ${gameId} started with players:`, player1.playerName, player2.playerName);
+      // Envoyer les données de début de partie
+      const gameData = game.getCurrentPlayerData();
+      player1.socket.emit('game-start', gameData);
+      player2.socket.emit('game-start', gameData);
+
+      // Démarrer le timer du premier tour
+      game.startTurnTimer(io);
+
     } else {
+      // En attente d'un adversaire
       socket.emit('waiting-for-opponent', {
-        message: 'Waiting for another player to join...',
         queuePosition: gameQueue.length
       });
     }
-  });
 
-  socket.on('observe-cell', (data) => {
+  } catch (error) {
+    console.error('Erreur join-game:', error);
+    socket.emit('error', { message: 'Erreur lors de la recherche de partie' });
+  }
+});
+
+socket.on('place-dot', async (data) => {
+  try {
     const { gameId, x, y, playerId } = data;
     const game = activeGames.get(gameId);
 
-    if (game && game.gameState === 'playing') {
-      const result = game.observeCell(x, y, playerId);
-
-      if (result.success) {
-        io.to(gameId).emit('cell-observed', {
-          position: { x, y },
-          newState: result.newState,
-          playerId: playerId,
-          gameState: game.getGameState()
-        });
-
-        if (game.checkWinCondition()) {
-          game.gameState = 'completed';
-          io.to(gameId).emit('game-end', {
-            winner: playerId,
-            gameState: game.getGameState(),
-            message: 'Quantum Garden completed!'
-          });
-
-          setTimeout(() => {
-            activeGames.delete(gameId);
-          }, 30000);
-        }
-      }
+    if (!game) {
+      socket.emit('error', { message: 'Partie introuvable' });
+      return;
     }
-  });
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    console.log(`🎯 Placement dot [${x}, ${y}] par ${playerId}`);
 
-    const player = connectedPlayers.get(socket.id);
-    if (player) {
-      connectedPlayers.delete(socket.id);
+    const result = game.placeDot(x, y, playerId);
 
-      const queueIndex = gameQueue.findIndex(p => p.socketId === socket.id);
+    if (!result.success) {
+      socket.emit('error', { message: result.message });
+      return;
+    }
+
+    // Arrêter le timer actuel
+    game.clearTurnTimer();
+
+    // Broadcast du placement à tous les joueurs
+    const placementData = {
+      x, y, playerId,
+      gameState: game.getCurrentPlayerData().gameState
+    };
+    game.broadcastToPlayers(io, 'dot-placed', placementData);
+
+    // Traiter les expansions
+    const { expansions, captures } = game.processExpansions();
+
+    if (expansions.length > 0) {
+      game.broadcastToPlayers(io, 'expansion-occurred', {
+        expansions,
+        gameState: game.getCurrentPlayerData().gameState
+      });
+    }
+
+    if (captures.length > 0) {
+      game.broadcastToPlayers(io, 'capture-occurred', {
+        captures,
+        gameState: game.getCurrentPlayerData().gameState
+      });
+    }
+
+    // Vérifier si la partie est terminée
+    if (result.gameEnded) {
+      console.log(`🏆 Partie ${gameId} terminée, gagnant: ${result.winner}`);
+
+      game.broadcastToPlayers(io, 'game-end', {
+        winner: result.winner,
+        reason: result.reason,
+        territoryPercentage: result.territoryPercentage
+      });
+
+      // Nettoyer la partie
+      activeGames.delete(gameId);
+      game.clearTurnTimer();
+    } else {
+      // Changer de tour
+      game.broadcastToPlayers(io, 'turn-changed', game.getCurrentPlayerData());
+
+      // Démarrer le timer pour le prochain tour
+      game.startTurnTimer(io);
+    }
+
+  } catch (error) {
+    console.error('Erreur place-dot:', error);
+    socket.emit('error', { message: 'Erreur lors du placement' });
+  }
+});
+
+socket.on('cancel-search', () => {
+  try {
+    const playerId = socket.playerId;
+
+    // Retirer de la queue
+    const index = gameQueue.findIndex(player => player.playerId === playerId);
+    if (index !== -1) {
+      gameQueue.splice(index, 1);
+      console.log(`❌ ${socket.playerName} a annulé la recherche`);
+    }
+
+    // Retirer des joueurs connectés
+    connectedPlayers.delete(playerId);
+
+  } catch (error) {
+    console.error('Erreur cancel-search:', error);
+  }
+});
+
+socket.on('disconnect', (reason) => {
+  console.log(`🔌 Déconnexion: ${socket.id}, raison: ${reason}`);
+
+  try {
+    const playerId = socket.playerId;
+
+    if (playerId) {
+      // Retirer de la queue si présent
+      const queueIndex = gameQueue.findIndex(player => player.playerId === playerId);
       if (queueIndex !== -1) {
         gameQueue.splice(queueIndex, 1);
       }
-    }
-  });
-});
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    activeGames: activeGames.size,
-    connectedPlayers: connectedPlayers.size,
-    queueLength: gameQueue.length
-  });
+      // Trouver la partie active du joueur
+      let playerGame = null;
+      for (const [gameId, game] of activeGames) {
+        if (game.players.some(p => p.id === playerId)) {
+          playerGame = { gameId, game };
+          break;
+        }
+      }
+
+      if (playerGame) {
+        const { gameId, game } = playerGame;
+
+        // Notifier l'autre joueur
+        game.broadcastToPlayers(io, 'player-disconnected', {
+          playerId,
+          playerName: socket.playerName
+        });
+
+        // Nettoyer la partie après un délai
+        setTimeout(() => {
+          if (activeGames.has(gameId)) {
+            console.log(`🧹 Nettoyage partie ${gameId} après déconnexion`);
+            game.clearTurnTimer();
+
+            game.broadcastToPlayers(io, 'player-left', {
+              playerId,
+              playerName: socket.playerName
+            });
+
+            activeGames.delete(gameId);
+          }
+        }, 30000); // 30 secondes de grâce
+      }
+
+      // Retirer des joueurs connectés
+      connectedPlayers.delete(playerId);
+    }
+
+  } catch (error) {
+    console.error('Erreur lors de la déconnexion:', error);
+  }
+});
 });
 
 const PORT = process.env.PORT || 5002;
 server.listen(PORT, () => {
-  console.log(`🚀 Quantum Garden Server running on port ${PORT}`);
-  console.log(`🎮 Game ready for multiplayer connections!`);
+console.log(`🎯 Battle Dots Server running on port ${PORT}`);
 });
+
+// Nettoyage périodique des parties inactives
+setInterval(() => {
+const now = Date.now();
+for (const [gameId, game] of activeGames) {
+  // Supprimer les parties inactives depuis plus de 1 heure
+  if (now - parseInt(gameId.split('_')[1]) > 3600000) {
+    console.log(`🧹 Suppression partie inactive: ${gameId}`);
+    game.clearTurnTimer();
+    activeGames.delete(gameId);
+  }
+}
+}, 300000); // Vérification toutes les 5 minutes
