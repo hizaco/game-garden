@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Garden - Jeu Web Inédit</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <header>
+            <h1>🌿 Quantum Garden</h1>
+            <p>Cultivez votre jardin quantique en observant les plantes !</p>
+            <div class="stats">
+                <span>Score: <span id="score">0</span></span>
+                <span>Niveau: <span id="level">1</span></span>
+                <span>Observations: <span id="observations">10</span></span>
+            </div>
+        </header>
+
+        <main>
+            <div class="objective">
+                <h3>Objectif du niveau :</h3>
+                <p id="objective-text">Créez 3 fleurs rouges alignées</p>
+                <div class="target-pattern" id="target-pattern"></div>
+            </div>
+
+            <div class="garden-grid" id="garden"></div>
+
+            <div class="controls">
+                <button id="reset-btn">🔄 Nouveau Jardin</button>
+                <button id="hint-btn">💡 Indice</button>
+                <button id="next-level-btn" style="display:none;">➡️ Niveau Suivant</button>
+            </div>
+        </main>
+
+        <div class="info-panel">
+            <h3>🧬 États Quantiques</h3>
+            <div class="quantum-states">
+                <div class="state superposition">🌈 Superposition</div>
+                <div class="state red">🌹 Rouge</div>
+                <div class="state blue">🌿 Bleu</div>
+                <div class="state yellow">🌻 Jaune</div>
+                <div class="state purple">🔮 Violet</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+</body>
+</html>

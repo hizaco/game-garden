@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Garden - Jeu Multijoueur</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="game-header">
+        <div class="container">
+            <h1 class="game-title">🌌 Quantum Garden</h1>
+            <div class="user-info">
+                <span id="player-name">Joueur</span>
+                <button id="profile-btn" class="btn-secondary">Profil</button>
+                <button id="logout-btn" class="btn-secondary">Déconnexion</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="game-container">
+        <!-- Game Status -->
+        <div class="game-status">
+            <div class="status-card">
+                <h3>🎯 Objectifs</h3>
+                <div id="objectives">
+                    <div class="objective-item">
+                        <span class="objective-icon">🌸</span>
+                        <span>Fleurs: <span id="flowers-needed">0</span></span>
+                    </div>
+                    <div class="objective-item">
+                        <span class="objective-icon">🌳</span>
+                        <span>Arbres: <span id="trees-needed">0</span></span>
+                    </div>
+                    <div class="objective-item">
+                        <span class="objective-icon">💎</span>
+                        <span>Cristaux: <span id="crystals-needed">0</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>👥 Joueurs</h3>
+                <div id="players-list"></div>
+            </div>
+
+            <div class="status-card">
+                <h3>⚡ État Quantique</h3>
+                <div class="quantum-status">
+                    <div class="quantum-indicator">
+                        <span class="quantum-dot superposition"></span>
+                        <span>Superposition</span>
+                    </div>
+                    <div class="quantum-indicator">
+                        <span class="quantum-dot collapsed"></span>
+                        <span>Effondré</span>
+                    </div>
+                    <div class="quantum-indicator">
+                        <span class="quantum-dot entangled"></span>
+                        <span>Intriqué</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Board - IMPORTANT: Cet élément DOIT exister -->
+        <div class="game-board-container">
+            <div class="game-board" id="game-board">
+                <!-- Grille de jeu 8x8 générée dynamiquement -->
+            </div>
+        </div>
+
+        <!-- Game Controls -->
+        <div class="game-controls">
+            <button id="new-game-btn" class="btn-primary">🎮 Nouvelle Partie</button>
+            <button id="save-game-btn" class="btn-secondary">💾 Sauvegarder</button>
+            <button id="load-game-btn" class="btn-secondary">📁 Charger</button>
+            <button id="help-btn" class="btn-secondary">❓ Aide</button>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="connection-status" id="connection-status">
+            <div class="status-indicator offline" id="status-indicator"></div>
+            <span id="status-text">Déconnecté</span>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="game-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="modal-close">&times;</span>
+            <h2 id="modal-title">Information</h2>
+            <div id="modal-body">
+                <p id="modal-message"></p>
+            </div>
+            <div class="modal-actions">
+                <button id="modal-confirm" class="btn-primary">OK</button>
+                <button id="modal-cancel" class="btn-secondary">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="waiting-modal" class="modal">
+        <div class="modal-content">
+            <h2>🔍 Recherche d'adversaire</h2>
+            <div class="loading-spinner"></div>
+            <p>Recherche d'un autre joueur...</p>
+            <p>Position dans la file: <span id="queue-position">1</span></p>
+            <button id="cancel-search" class="btn-secondary">Annuler</button>
+        </div>
+    </div>
+
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>🌌 Comment jouer à Quantum Garden</h2>
+            <div class="help-content">
+                <h3>🎯 Objectif</h3>
+                <p>Cultivez un jardin quantique en observant les cellules pour faire s'effondrer leur état quantique.</p>
+
+                <h3>🔬 Mécaniques Quantiques</h3>
+                <ul>
+                    <li><strong>Superposition :</strong> Les cellules existent dans plusieurs états simultanément</li>
+                    <li><strong>Observation :</strong> Cliquer sur une cellule fait s'effondrer son état</li>
+                    <li><strong>Intrication :</strong> Les cellules voisines sont affectées par l'observation</li>
+                </ul>
+
+                <h3>🎮 Contrôles</h3>
+                <ul>
+                    <li>Cliquez sur une cellule pour l'observer</li>
+                    <li>Atteignez les objectifs pour gagner</li>
+                    <li>Coopérez avec l'autre joueur</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/multiplayer.js"></script>
+    <script src="assets/js/script.js"></script>
+</body>
+</html>

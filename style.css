@@ -1,0 +1,253 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: white;
+}
+
+.game-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    font-size: 3em;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    margin-bottom: 10px;
+}
+
+.stats {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    font-size: 1.2em;
+    margin-top: 15px;
+}
+
+.stats span {
+    background: rgba(255,255,255,0.2);
+    padding: 8px 15px;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+}
+
+main {
+    display: grid;
+    grid-template-columns: 1fr 400px 1fr;
+    gap: 30px;
+    align-items: start;
+}
+
+.objective {
+    background: rgba(255,255,255,0.1);
+    padding: 20px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+}
+
+.objective h3 {
+    margin-bottom: 10px;
+    color: #ffd700;
+}
+
+.target-pattern {
+    display: grid;
+    grid-template-columns: repeat(3, 30px);
+    gap: 5px;
+    margin-top: 15px;
+    justify-content: center;
+}
+
+.target-cell {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.5);
+}
+
+.garden-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 80px);
+    grid-template-rows: repeat(6, 80px);
+    gap: 8px;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.plant {
+    width: 80px;
+    height: 80px;
+    border-radius: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2em;
+    transition: all 0.3s ease;
+    border: 3px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.plant:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(255,255,255,0.3);
+}
+
+.plant.superposition {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57);
+    background-size: 300% 300%;
+    animation: quantumShimmer 2s ease-in-out infinite;
+    border-color: rgba(255,255,255,0.8);
+}
+
+.plant.collapsed {
+    animation: collapseEffect 0.5s ease-out;
+}
+
+.plant.red {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+    color: white;
+}
+
+.plant.blue {
+    background: linear-gradient(135deg, #4ecdc4, #44a08d);
+    color: white;
+}
+
+.plant.yellow {
+    background: linear-gradient(135deg, #feca57, #ff9ff3);
+    color: white;
+}
+
+.plant.purple {
+    background: linear-gradient(135deg, #a8edea, #fed6e3);
+    color: #333;
+}
+
+.plant.empty {
+    background: rgba(255,255,255,0.1);
+    border: 2px dashed rgba(255,255,255,0.3);
+}
+
+@keyframes quantumShimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@keyframes collapseEffect {
+    0% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.2) rotate(180deg); }
+    100% { transform: scale(1) rotate(360deg); }
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.controls button {
+    padding: 15px 20px;
+    border: none;
+    border-radius: 25px;
+    font-size: 1.1em;
+    cursor: pointer;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.controls button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.info-panel {
+    background: rgba(255,255,255,0.1);
+    padding: 20px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+}
+
+.quantum-states {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.state {
+    padding: 10px 15px;
+    border-radius: 20px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.state.superposition {
+    background: linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1);
+    background-size: 200% 200%;
+    animation: quantumShimmer 3s ease-in-out infinite;
+}
+
+.state.red { background: #ff6b6b; }
+.state.blue { background: #4ecdc4; }
+.state.yellow { background: #feca57; }
+.state.purple { background: #a8edea; color: #333; }
+
+.victory-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    color: #333;
+    padding: 30px 50px;
+    border-radius: 20px;
+    font-size: 1.5em;
+    font-weight: bold;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    z-index: 1000;
+    animation: victoryPulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes victoryPulse {
+    from { transform: translate(-50%, -50%) scale(1); }
+    to { transform: translate(-50%, -50%) scale(1.05); }
+}
+
+@media (max-width: 1024px) {
+    main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        text-align: center;
+    }
+
+    .garden-grid {
+        grid-template-columns: repeat(5, 60px);
+        grid-template-rows: repeat(5, 60px);
+    }
+
+    .plant {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5em;
+    }
+}
