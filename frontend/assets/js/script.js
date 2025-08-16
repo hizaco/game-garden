@@ -196,8 +196,21 @@ function placeDot(x, y) {
         return;
     }
 
-    if (!gameState || gameState.currentPlayer !== currentUser.id) {
-        console.log('❌ Ce n\'est pas votre tour');
+    if (!gameState) {
+        console.log('❌ État du jeu manquant');
+        showModal('Erreur', 'État du jeu non disponible!');
+        return;
+    }
+
+    // Vérification que le jeu est en cours
+    if (gameState.state === GAME_STATES.FINISHED) {
+        console.log('❌ Partie déjà terminée');
+        showModal('Info', 'La partie est terminée!');
+        return;
+    }
+
+    if (gameState.currentPlayer !== currentUser.id) {
+        console.log('❌ Ce n\'est pas votre tour, tour actuel:', gameState.currentPlayer, 'user:', currentUser.id);
         showModal('Info', 'Ce n\'est pas votre tour!');
         return;
     }
@@ -208,6 +221,11 @@ function placeDot(x, y) {
         showModal('Info', 'Cette case n\'est pas disponible!');
         return;
     }
+
+    // Debug: Compter les dots avant placement
+    const player1Dots = document.querySelectorAll('.cell.player1').length;
+    const player2Dots = document.querySelectorAll('.cell.player2').length;
+    console.log(`🔍 AVANT placement - Player1: ${player1Dots} dots, Player2: ${player2Dots} dots`);
 
     // Animation de placement immédiate
     cell.style.transform = 'scale(0.8)';
@@ -242,6 +260,8 @@ function handleWaitingForOpponent(data) {
 
 function handleGameStart(data) {
     console.log('🎯 Partie Battle Dots commencée!', data);
+    console.log('🔍 État initial du jeu:', data.gameState);
+
     currentGameId = data.gameId;
     gameState = data.gameState;
 
@@ -258,8 +278,20 @@ function handleGameStart(data) {
 
 function handleDotPlaced(data) {
     console.log('🎯 Dot placé reçu:', data);
+    console.log('🔍 Nouvel état du jeu:', data.gameState);
 
     const { x, y, playerId, gameState: newGameState } = data;
+
+    // Vérifier si le jeu se termine anormalement
+    if (newGameState.state === GAME_STATES.FINISHED) {
+        console.warn('⚠️ ATTENTION: Le jeu se termine immédiatement après un placement de dot!');
+        console.log('🔍 Raison de fin:', newGameState.endReason);
+        console.log('🔍 État de la grille à la fin:', newGameState.grid);
+    }
+
+    // Mise à jour de l'état AVANT modifications visuelles
+    gameState = newGameState;
+
     const cell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
 
     if (!cell) {
@@ -267,12 +299,26 @@ function handleDotPlaced(data) {
         return;
     }
 
-    const playerClass = playerId === gameState.players[0].id ? 'player1' : 'player2';
+    let playerClass;
+    if (gameState && gameState.players && gameState.players.length >= 2) {
+        playerClass = playerId === gameState.players[0].id ? 'player1' : 'player2';
+    } else {
+        console.error('❌ Informations des joueurs manquantes');
+        return;
+    }
+
     const playerName = gameState.players.find(p => p.id === playerId)?.playerName || 'Joueur';
 
     cell.classList.remove('empty', 'bonus');
     cell.classList.add(playerClass);
     cell.textContent = '●';
+
+    // Debug: Compter les dots après placement
+    setTimeout(() => {
+        const player1DotsAfter = document.querySelectorAll('.cell.player1').length;
+        const player2DotsAfter = document.querySelectorAll('.cell.player2').length;
+        console.log(`🔍 APRÈS placement - Player1: ${player1DotsAfter} dots, Player2: ${player2DotsAfter} dots`);
+    }, 100);
 
     // Animation de placement
     cell.style.animation = 'expand-pulse 0.6s ease-out';
@@ -280,22 +326,32 @@ function handleDotPlaced(data) {
         cell.style.animation = '';
     }, 600);
 
-    gameState = newGameState;
     updateGameInterface(gameState);
     addGameLog(`${playerName} a placé un dot en [${x+1}, ${y+1}]`, playerClass);
 }
 
 function handleTurnChanged(data) {
     console.log('🔄 Changement de tour:', data);
+    console.log('🔍 État du jeu au changement de tour:', data.gameState);
+
     gameState = data.gameState;
+
+    // Vérifier que le jeu n'est pas terminé
+    if (gameState.state === GAME_STATES.FINISHED) {
+        console.log('❌ Tentative de changement de tour sur jeu terminé');
+        return;
+    }
+
     updateGameInterface(gameState);
     startTurnTimer();
 
     const currentPlayerName = gameState.players.find(p => p.id === gameState.currentPlayer)?.playerName || 'Joueur';
     const isMyTurn = gameState.currentPlayer === currentUser.id;
 
-    document.getElementById('current-turn-text').textContent =
-        isMyTurn ? 'À votre tour!' : `Tour de ${currentPlayerName}`;
+    const currentTurnText = document.getElementById('current-turn-text');
+    if (currentTurnText) {
+        currentTurnText.textContent = isMyTurn ? 'À votre tour!' : `Tour de ${currentPlayerName}`;
+    }
 
     addGameLog(`Tour de ${currentPlayerName}`);
 }
@@ -303,6 +359,8 @@ function handleTurnChanged(data) {
 function handleExpansionOccurred(data) {
     console.log('💥 Expansion détectée:', data);
     const { expansions, gameState: newGameState } = data;
+
+    gameState = newGameState;
 
     expansions.forEach(expansion => {
         const { x, y, playerId } = expansion;
@@ -321,7 +379,6 @@ function handleExpansionOccurred(data) {
         }
     });
 
-    gameState = newGameState;
     updateGameInterface(gameState);
     addGameLog(`💥 ${expansions.length} dots ont expansé!`);
 }
@@ -329,6 +386,8 @@ function handleExpansionOccurred(data) {
 function handleCaptureOccurred(data) {
     console.log('🏆 Capture détectée:', data);
     const { captures, gameState: newGameState } = data;
+
+    gameState = newGameState;
 
     captures.forEach(capture => {
         const { x, y, newPlayerId } = capture;
@@ -345,7 +404,6 @@ function handleCaptureOccurred(data) {
         }
     });
 
-    gameState = newGameState;
     updateGameInterface(gameState);
     addGameLog(`🏆 ${captures.length} dots capturés!`);
 }
@@ -365,9 +423,21 @@ function handlePowerActivated(data) {
 
 function handleGameEnd(data) {
     console.log('🏆 Partie terminée!', data);
+    console.log('🔍 DEBUG - Données de fin de partie complètes:', JSON.stringify(data, null, 2));
+
+    // Debug: Compter les dots au moment de la fin
+    const player1DotsEnd = document.querySelectorAll('.cell.player1').length;
+    const player2DotsEnd = document.querySelectorAll('.cell.player2').length;
+    console.log(`🔍 FINS DE PARTIE - Player1: ${player1DotsEnd} dots, Player2: ${player2DotsEnd} dots`);
+    console.log(`🔍 Raison de fin: ${data.reason}`);
+
+    // Marquer explicitement le jeu comme terminé
+    if (gameState) {
+        gameState.state = GAME_STATES.FINISHED;
+    }
 
     const isWinner = data.winner === currentUser.id;
-    const winnerName = gameState.players.find(p => p.id === data.winner)?.playerName || 'Joueur';
+    const winnerName = gameState?.players?.find(p => p.id === data.winner)?.playerName || 'Joueur';
 
     let message;
     if (data.reason === 'territory') {
@@ -375,28 +445,41 @@ function handleGameEnd(data) {
             `🎉 Victoire! Vous contrôlez ${data.territoryPercentage}% du territoire!` :
             `😞 Défaite. ${winnerName} contrôle ${data.territoryPercentage}% du territoire.`;
     } else if (data.reason === 'elimination') {
+        // Ajouter des informations de debug dans le message
         message = isWinner ?
-            '🎉 Victoire! Vous avez éliminé tous les dots adverses!' :
-            '😞 Défaite. Tous vos dots ont été éliminés.';
+            `🎉 Victoire! Vous avez éliminé tous les dots adverses!\n\nDEBUG: P1=${player1DotsEnd}, P2=${player2DotsEnd}` :
+            `😞 Défaite. Tous vos dots ont été éliminés.\n\nDEBUG: P1=${player1DotsEnd}, P2=${player2DotsEnd}`;
     } else {
         message = isWinner ? '🎉 Victoire!' : '😞 Défaite.';
     }
 
     showModal('Fin de partie', message);
     stopTurnTimer();
-    addGameLog(`🏆 ${winnerName} remporte la victoire!`);
+    addGameLog(`🏆 ${winnerName} remporte la victoire! (${data.reason})`);
 
-    currentGameId = null;
-    gameState = null;
+    // Attendre plus longtemps avant de réinitialiser pour permettre l'analyse
+    setTimeout(() => {
+        console.log('🔄 Réinitialisation après fin de partie');
+        currentGameId = null;
+        gameState = null;
+    }, 10000); // 10 secondes au lieu de 5
 }
 
 function handlePlayerLeft(data) {
     console.log('👋 Joueur parti:', data);
+
+    if (gameState) {
+        gameState.state = GAME_STATES.FINISHED;
+    }
+
     showModal('Joueur parti', 'Votre adversaire a quitté la partie. Vous gagnez par forfait!');
     stopTurnTimer();
     addGameLog('👋 L\'adversaire a quitté la partie');
-    currentGameId = null;
-    gameState = null;
+
+    setTimeout(() => {
+        currentGameId = null;
+        gameState = null;
+    }, 3000);
 }
 
 function handlePlayerDisconnected(data) {
@@ -444,9 +527,11 @@ function updateGameInterface(gameState) {
 }
 
 function updateTerritoryDisplay(gameState) {
+    if (!gameState || !gameState.territoryCount) return;
+
     const totalCells = 100;
-    const player1Territory = gameState.territoryCount?.player1 || 0;
-    const player2Territory = gameState.territoryCount?.player2 || 0;
+    const player1Territory = gameState.territoryCount.player1 || 0;
+    const player2Territory = gameState.territoryCount.player2 || 0;
 
     const player1Percentage = Math.round((player1Territory / totalCells) * 100);
     const player2Percentage = Math.round((player2Territory / totalCells) * 100);
@@ -465,11 +550,11 @@ function updateTerritoryDisplay(gameState) {
 }
 
 function updatePlayersDisplay(players) {
+    if (!players || players.length < 2) return;
+
     const playersList = document.getElementById('players-list');
     const player1Name = document.getElementById('player1-name');
     const player2Name = document.getElementById('player2-name');
-
-    if (!players || players.length < 2) return;
 
     if (player1Name) player1Name.textContent = players[0].playerName;
     if (player2Name) player2Name.textContent = players[1].playerName;
@@ -486,7 +571,7 @@ function updatePlayersDisplay(players) {
 
 function updateTurnDisplay(gameState) {
     const currentTurnText = document.getElementById('current-turn-text');
-    if (!currentTurnText) return;
+    if (!currentTurnText || !gameState || !gameState.players) return;
 
     const currentPlayerName = gameState.players.find(p => p.id === gameState.currentPlayer)?.playerName;
     const isMyTurn = gameState.currentPlayer === currentUser.id;
@@ -497,7 +582,6 @@ function updateTurnDisplay(gameState) {
 }
 
 function updatePowersDisplay() {
-    // Implémentation basique - à étendre selon les besoins
     const powerItems = document.querySelectorAll('.power-item');
     powerItems.forEach(item => {
         item.classList.remove('active');
@@ -559,17 +643,21 @@ function addGameLog(message, playerClass = '') {
     logContent.appendChild(logEntry);
     logContent.scrollTop = logContent.scrollHeight;
 
-    // Limiter à 50 entrées
     while (logContent.children.length > 50) {
         logContent.removeChild(logContent.firstChild);
     }
 }
 
 function resetGameUI() {
-    document.getElementById('current-turn-text').textContent = 'En attente...';
-    document.getElementById('player1-percentage').textContent = '0%';
-    document.getElementById('player2-percentage').textContent = '0%';
-    document.getElementById('timer-text').textContent = '15';
+    const currentTurnText = document.getElementById('current-turn-text');
+    const player1Percentage = document.getElementById('player1-percentage');
+    const player2Percentage = document.getElementById('player2-percentage');
+    const timerText = document.getElementById('timer-text');
+
+    if (currentTurnText) currentTurnText.textContent = 'En attente...';
+    if (player1Percentage) player1Percentage.textContent = '0%';
+    if (player2Percentage) player2Percentage.textContent = '0%';
+    if (timerText) timerText.textContent = '15';
 
     const player1Bar = document.getElementById('player1-territory');
     const player2Bar = document.getElementById('player2-territory');
@@ -584,6 +672,7 @@ function resetGameUI() {
 
 function createGameBoardFromState(gameState) {
     console.log('🎯 Création plateau depuis état serveur...');
+    console.log('🔍 État de la grille:', gameState.grid);
 
     if (!gameState || !gameState.grid) {
         console.error('❌ Données de grille manquantes');
@@ -605,21 +694,17 @@ function createGameBoardFromState(gameState) {
 
             const cellData = gameState.grid[i] && gameState.grid[i][j] ? gameState.grid[i][j] : null;
 
-            if (cellData) {
-                if (cellData.owner) {
-                    const playerClass = cellData.owner === gameState.players[0].id ? 'player1' : 'player2';
-                    cell.classList.add(playerClass);
-                    cell.textContent = '●';
+            if (cellData && cellData.owner) {
+                const playerClass = cellData.owner === gameState.players[0].id ? 'player1' : 'player2';
+                cell.classList.add(playerClass);
+                cell.textContent = '●';
 
-                    if (cellData.mature) {
-                        cell.classList.add('mature');
-                    }
-                } else if (cellData.type === 'bonus') {
-                    cell.classList.add('bonus');
-                    cell.textContent = '⚡';
-                } else {
-                    cell.classList.add('empty');
+                if (cellData.mature) {
+                    cell.classList.add('mature');
                 }
+            } else if (cellData && cellData.type === 'bonus') {
+                cell.classList.add('bonus');
+                cell.textContent = '⚡';
             } else {
                 cell.classList.add('empty');
             }

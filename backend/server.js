@@ -249,7 +249,7 @@ class BattleDots {
 
     return captures;
   }
-  
+
 findConnectedGroup(startX, startY, playerId, visited) {
   const group = [];
   const queue = [{ x: startX, y: startY }];
@@ -372,20 +372,23 @@ checkWinCondition() {
   }
 
   // Victoire par élimination (adversaire n'a plus de dots)
-  if (player1Territory > 0 && player2Territory === 0) {
-    return {
-      playerId: this.players[0].id,
-      reason: 'elimination',
-      percentage: 100
-    };
-  }
+  // ⚠️ On attend que les 2 joueurs aient eu au moins un tour (turnCount > 1)
+  if (this.turnCount > 1) {
+    if (player1Territory > 0 && player2Territory === 0) {
+      return {
+        playerId: this.players[0].id,
+        reason: 'elimination',
+        percentage: 100
+      };
+    }
 
-  if (player2Territory > 0 && player1Territory === 0) {
-    return {
-      playerId: this.players[1].id,
-      reason: 'elimination',
-      percentage: 100
-    };
+    if (player2Territory > 0 && player1Territory === 0) {
+      return {
+        playerId: this.players[1].id,
+        reason: 'elimination',
+        percentage: 100
+      };
+    }
   }
 
   return null; // Pas de gagnant encore
