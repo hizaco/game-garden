@@ -1,24 +1,16 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
 :root {
-    --primary-color: #2563eb;
-    --secondary-color: #dc2626;
     --background: #0f172a;
-    --surface: #1e293b;
-    --surface-light: #334155;
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --border: #475569;
+    --surface: #111827;
+    --surface-light: #1f2937;
+    --border: #374151;
+    --text-primary: #e5e7eb;
+    --text-secondary: #9ca3af;
+    --primary-color: #3b82f6;
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
-    --player1-color: #3b82f6;
-    --player2-color: #ef4444;
-    --neutral: #6b7280;
+    --player1: #60a5fa;
+    --player2: #f472b6;
     --bonus: #fbbf24;
 }
 
@@ -114,6 +106,7 @@ body {
     position: relative;
 }
 
+/* Use CSS variable for width to match JS updates */
 .timer-bar::after {
     content: '';
     position: absolute;
@@ -121,7 +114,7 @@ body {
     left: 0;
     height: 100%;
     background: var(--primary-color);
-    width: 100%;
+    width: var(--timer-width, 100%);
     transition: width 0.1s linear;
 }
 
@@ -173,6 +166,15 @@ body {
 .btn-danger {
     background: var(--danger);
     color: white;
+}
+
+/* Main Game Area */
+.game-main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr 300px;
+    gap: 1rem;
+    padding: 1rem 2rem;
 }
 
 /* Main Game Area */

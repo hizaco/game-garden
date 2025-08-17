@@ -120,6 +120,30 @@ class BattleDots {
     return types[Math.floor(Math.random() * types.length)];
   }
 
+  isValidPosition(x, y) {
+    return x >= 0 && x < 10 && y >= 0 && y < 10;
+  }
+
+  getNeighbors(x, y) {
+    const neighbors = [];
+    const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // Haut, Bas, Gauche, Droite
+
+    directions.forEach(([dx, dy]) => {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (this.isValidPosition(nx, ny)) {
+        neighbors.push({ nx, ny });
+      }
+    });
+
+    return neighbors;
+  }
+
+  getEnemyId(playerId) {
+    return this.players[0].id === playerId ? this.players[1].id : this.players[0].id;
+  }
+
+  // Place a dot and advance the turn. Expansions and win checks are handled OUTSIDE this method.
   placeDot(x, y, playerId) {
     if (this.gameState !== 'playing') {
       return { success: false, message: 'Partie terminée' };
@@ -159,25 +183,7 @@ class BattleDots {
     this.currentPlayer = (this.currentPlayer + 1) % 2;
     this.turnCount++;
 
-    // Vérifier les expansions à effectuer
-    this.processExpansions();
-
-    // Mettre à jour le comptage des territoires
-    this.updateTerritoryCount();
-
-    // Vérifier les conditions de victoire
-    const winner = this.checkWinCondition();
-    if (winner) {
-      this.gameState = 'finished';
-      return {
-        success: true,
-        gameEnded: true,
-        winner: winner.playerId,
-        reason: winner.reason,
-        territoryPercentage: winner.percentage
-      };
-    }
-
+    // Note: pas d'expansion ni de check de victoire ici; ça se fait après.
     return { success: true };
   }
 
@@ -250,456 +256,651 @@ class BattleDots {
     return captures;
   }
 
-findConnectedGroup(startX, startY, playerId, visited) {
-  const group = [];
-  const queue = [{ x: startX, y: startY }];
-  const localVisited = new Set();
+  findConnectedGroup(startX, startY, playerId, visited) {
+    const group = [];
+    const queue = [{ x: startX, y: startY }];
+    const localVisited = new Set();
 
-  while (queue.length > 0) {
-    const { x, y } = queue.shift();
-    const pos = `${x},${y}`;
+    while (queue.length > 0) {
+      const { x, y } = queue.shift();
+      const pos = `${x},${y}`;
 
-    if (localVisited.has(pos) || visited.has(pos)) continue;
-    if (!this.isValidPosition(x, y)) continue;
-    if (this.grid[x][y].owner !== playerId) continue;
+      if (localVisited.has(pos) || visited.has(pos)) continue;
+      if (!this.isValidPosition(x, y)) continue;
+      if (this.grid[x][y].owner !== playerId) continue;
 
-    localVisited.add(pos);
-    visited.add(pos);
-    group.push({ x, y });
+      localVisited.add(pos);
+      visited.add(pos);
+      group.push({ x, y });
 
-    // Ajouter les voisins à la queue
-    const neighbors = this.getNeighbors(x, y);
-    neighbors.forEach(({ nx, ny }) => {
-      queue.push({ x: nx, y: ny });
-    });
+      // Ajouter les voisins à la queue
+      const neighbors = this.getNeighbors(x, y);
+      neighbors.forEach(({ nx, ny }) => {
+        queue.push({ x: nx, y: ny });
+      });
+    }
+
+    return group;
   }
 
-  return group;
-}
+  isGroupSurrounded(group, playerId) {
+    const enemyId = this.getEnemyId(playerId);
 
-isGroupSurrounded(group, playerId) {
-  const enemyId = this.getEnemyId(playerId);
+    for (const { x, y } of group) {
+      const neighbors = this.getNeighbors(x, y);
 
-  for (const { x, y } of group) {
-    const neighbors = this.getNeighbors(x, y);
+      for (const { nx, ny } of neighbors) {
+        if (!this.isValidPosition(nx, ny)) {
+          // Bord de la grille compte comme non-entouré
+          return false;
+        }
 
-    for (const { nx, ny } of neighbors) {
-      if (!this.isValidPosition(nx, ny)) {
-        // Bord de la grille compte comme non-entouré
-        return false;
-      }
-
-      if (this.grid[nx][ny].owner === null || this.grid[nx][ny].owner === playerId) {
-        // Case vide ou alliée = pas entouré
-        return false;
+        if (this.grid[nx][ny].owner === null || this.grid[nx][ny].owner === playerId) {
+          // Case vide ou alliée = pas entouré
+          return false;
+        }
       }
     }
+
+    return true; // Complètement entouré par l'ennemi
   }
 
-  return true; // Complètement entouré par l'ennemi
-}
-
-getEnemyId(playerId) {
-  return this.players[0].id === playerId ? this.players[1].id : this.players[0].id;
-}
-
-getNeighbors(x, y) {
-  const neighbors = [];
-  const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // Haut, Bas, Gauche, Droite
-
-  directions.forEach(([dx, dy]) => {
-    const nx = x + dx;
-    const ny = y + dy;
-    if (this.isValidPosition(nx, ny)) {
-      neighbors.push({ nx, ny });
-    }
-  });
-
-  return neighbors;
-}
-
-isValidPosition(x, y) {
-  return x >= 0 && x < 10 && y >= 0 && y < 10;
-}
-
-activateBonus(playerId, bonusType) {
-  // Implémentation basique des bonus
-  console.log(`⚡ Bonus ${bonusType} activé pour ${playerId}`);
-  // TODO: Implémenter les effets des bonus
-}
-
-updateTerritoryCount() {
-  let player1Count = 0;
-  let player2Count = 0;
-
-  for (let i = 0; i < 10; i++) {
-    for (let j = 0; j < 10; j++) {
-      const owner = this.grid[i][j].owner;
-      if (owner === this.players[0].id) {
-        player1Count++;
-      } else if (owner === this.players[1].id) {
-        player2Count++;
-      }
-    }
+  activateBonus(playerId, bonusType) {
+    // Implémentation basique des bonus
+    console.log(`⚡ Bonus ${bonusType} activé pour ${playerId}`);
+    // TODO: Implémenter les effets des bonus
   }
 
-  this.territoryCount = {
-    player1: player1Count,
-    player2: player2Count
-  };
-}
+  updateTerritoryCount() {
+    let player1Count = 0;
+    let player2Count = 0;
 
-checkWinCondition() {
-  const totalCells = 100;
-  const player1Territory = this.territoryCount.player1;
-  const player2Territory = this.territoryCount.player2;
+    for (let i = 0; i < 10; i++) {
+      for (let j = 0; j < 10; j++) {
+        const owner = this.grid[i][j].owner;
+        if (owner === this.players[0].id) {
+          player1Count++;
+        } else if (owner === this.players[1].id) {
+          player2Count++;
+        }
+      }
+    }
 
-  // Victoire par contrôle de territoire (60%)
-  if (player1Territory >= 60) {
-    return {
-      playerId: this.players[0].id,
-      reason: 'territory',
-      percentage: Math.round((player1Territory / totalCells) * 100)
+    this.territoryCount = {
+      player1: player1Count,
+      player2: player2Count
     };
   }
 
-  if (player2Territory >= 60) {
-    return {
-      playerId: this.players[1].id,
-      reason: 'territory',
-      percentage: Math.round((player2Territory / totalCells) * 100)
-    };
-  }
+  checkWinCondition() {
+    const totalCells = 100;
+    const player1Territory = this.territoryCount.player1;
+    const player2Territory = this.territoryCount.player2;
 
-  // Victoire par élimination (adversaire n'a plus de dots)
-  // ⚠️ On attend que les 2 joueurs aient eu au moins un tour (turnCount > 1)
-  if (this.turnCount > 1) {
-    if (player1Territory > 0 && player2Territory === 0) {
+    // Victoire par contrôle de territoire (60%)
+    if (player1Territory >= 60) {
       return {
         playerId: this.players[0].id,
-        reason: 'elimination',
-        percentage: 100
+        reason: 'territory',
+        percentage: Math.round((player1Territory / totalCells) * 100)
       };
     }
 
-    if (player2Territory > 0 && player1Territory === 0) {
+    if (player2Territory >= 60) {
       return {
         playerId: this.players[1].id,
-        reason: 'elimination',
-        percentage: 100
+        reason: 'territory',
+        percentage: Math.round((player2Territory / totalCells) * 100)
       };
+    }
+
+    // Victoire par élimination (adversaire n'a plus de dots)
+    // ⚠️ On attend que les 2 joueurs aient eu au moins un tour (turnCount > 1)
+    if (this.turnCount > 1) {
+      if (player1Territory > 0 && player2Territory === 0) {
+        return {
+          playerId: this.players[0].id,
+          reason: 'elimination',
+          percentage: 100
+        };
+      }
+
+      if (player2Territory > 0 && player1Territory === 0) {
+        return {
+          playerId: this.players[1].id,
+          reason: 'elimination',
+          percentage: 100
+        };
+      }
+    }
+
+    // Fin si la grille est pleine: gagnant = majorité, sinon match nul
+    if (player1Territory + player2Territory === totalCells) {
+      if (player1Territory > player2Territory) {
+        return {
+          playerId: this.players[0].id,
+          reason: 'board_full',
+          percentage: Math.round((player1Territory / totalCells) * 100)
+        };
+      }
+      if (player2Territory > player1Territory) {
+        return {
+          playerId: this.players[1].id,
+          reason: 'board_full',
+          percentage: Math.round((player2Territory / totalCells) * 100)
+        };
+      }
+      // Égalité parfaite
+      return {
+        playerId: null,
+        reason: 'draw',
+        percentage: 50
+      };
+    }
+
+    return null; // Pas de gagnant encore
+  }
+
+  getCurrentPlayerData() {
+    return {
+      gameId: this.gameId,
+      gameState: {
+        grid: this.grid,
+        currentPlayer: this.players[this.currentPlayer].id,
+        players: this.players,
+        turnCount: this.turnCount,
+        territoryCount: this.territoryCount,
+        gameState: this.gameState
+      }
+    };
+  }
+
+  isAi(playerId) {
+    return typeof playerId === 'string' && playerId.startsWith('AI_');
+  }
+
+  computeAiMove(playerId) {
+    const empties = [];
+    let best = null;
+
+    for (let x = 0; x < 10; x++) {
+      for (let y = 0; y < 10; y++) {
+        if (this.grid[x][y].owner === null) {
+          const neighbors = this.getNeighbors(x, y);
+          const ownAdj = neighbors.filter(({ nx, ny }) => this.grid[nx][ny].owner === playerId).length;
+          const enemyAdj = neighbors.filter(({ nx, ny }) => {
+            const o = this.grid[nx][ny].owner;
+            return o !== null && o !== playerId;
+          }).length;
+
+          const score = ownAdj * 2 + enemyAdj; // Favoriser la consolidation et la pression
+          const candidate = { x, y, score };
+          empties.push(candidate);
+          if (!best || candidate.score > best.score) best = candidate;
+        }
+      }
+    }
+
+    if (!empties.length) return null;
+    // 30% de hasard parmi le top 10% pour varier
+    const sorted = empties.sort((a, b) => b.score - a.score);
+    const top = Math.max(1, Math.floor(sorted.length * 0.1));
+    const pick = Math.random() < 0.3 ? sorted[Math.floor(Math.random() * top)] : best;
+    return { x: pick.x, y: pick.y };
+  }
+
+  maybeTriggerAiMove(io) {
+    const currentId = this.players[this.currentPlayer].id;
+    if (this.isAi(currentId) && this.gameState === 'playing') {
+      // Petit délai pour l'effet
+      setTimeout(() => this.playAiTurn(io), 500);
+      return true;
+    }
+    return false;
+  }
+
+  playAiTurn(io) {
+    if (this.gameState !== 'playing') return;
+
+    const aiId = this.players[this.currentPlayer].id;
+    if (!this.isAi(aiId)) return;
+
+    const move = this.computeAiMove(aiId);
+
+    if (!move) {
+      // Pas de coup possible (grille pleine) => évaluer fin
+      this.updateTerritoryCount();
+      const winner = this.checkWinCondition();
+      if (winner) {
+        this.gameState = 'finished';
+        this.broadcastToPlayers(io, 'game-end', {
+          winner: winner.playerId,
+          reason: winner.reason,
+          territoryPercentage: winner.percentage
+        });
+        activeGames.delete(this.gameId);
+        this.clearTurnTimer();
+      } else {
+        // Passer le tour si vraiment aucun coup (devrait pas arriver)
+        this.currentPlayer = (this.currentPlayer + 1) % 2;
+        this.broadcastToPlayers(io, 'turn-changed', this.getCurrentPlayerData());
+        this.startTurnTimer(io);
+      }
+      return;
+    }
+
+    const result = this.placeDot(move.x, move.y, aiId);
+    if (!result.success) {
+      // Si improbable, on retente rapidement
+      return this.maybeTriggerAiMove(io);
+    }
+
+    // Broadcast placement
+    this.broadcastToPlayers(io, 'dot-placed', {
+      x: move.x, y: move.y, playerId: aiId,
+      gameState: this.getCurrentPlayerData().gameState
+    });
+
+    // Expansions + captures
+    const { expansions, captures } = this.processExpansions();
+    if (expansions.length > 0) {
+      this.broadcastToPlayers(io, 'expansion-occurred', {
+        expansions,
+        gameState: this.getCurrentPlayerData().gameState
+      });
+    }
+    if (captures.length > 0) {
+      this.broadcastToPlayers(io, 'capture-occurred', {
+        captures,
+        gameState: this.getCurrentPlayerData().gameState
+      });
+    }
+
+    // Comptage + victoire
+    this.updateTerritoryCount();
+    const winner = this.checkWinCondition();
+    if (winner) {
+      this.gameState = 'finished';
+      this.broadcastToPlayers(io, 'game-end', {
+        winner: winner.playerId,
+        reason: winner.reason,
+        territoryPercentage: winner.percentage
+      });
+      activeGames.delete(this.gameId);
+      this.clearTurnTimer();
+      return;
+    }
+
+    // Tour suivant
+    this.broadcastToPlayers(io, 'turn-changed', this.getCurrentPlayerData());
+    this.startTurnTimer(io);
+  }
+
+  startTurnTimer(io) {
+    this.clearTurnTimer();
+
+    // Si c'est un tour IA, jouer tout de suite sans timer côté client
+    if (this.maybeTriggerAiMove(io)) {
+      return;
+    }
+
+    let timeLeft = 15;
+    this.turnTimer = setInterval(() => {
+      timeLeft--;
+
+      // Broadcast du timer à tous les joueurs de cette partie
+      this.players.forEach(player => {
+        const socket = connectedPlayers.get(player.id);
+        if (socket) {
+          socket.emit('turn-timer', { timeLeft });
+        }
+      });
+
+      if (timeLeft <= 0) {
+        this.clearTurnTimer();
+        this.handleTurnTimeout(io);
+      }
+    }, 1000);
+  }
+
+  clearTurnTimer() {
+    if (this.turnTimer) {
+      clearInterval(this.turnTimer);
+      this.turnTimer = null;
     }
   }
 
-  return null; // Pas de gagnant encore
-}
+  handleTurnTimeout(io) {
+    console.log(`⏰ Timeout pour le joueur ${this.players[this.currentPlayer].id}`);
 
-getCurrentPlayerData() {
-  return {
-    gameId: this.gameId,
-    gameState: {
-      grid: this.grid,
-      currentPlayer: this.players[this.currentPlayer].id,
-      players: this.players,
-      turnCount: this.turnCount,
-      territoryCount: this.territoryCount,
-      gameState: this.gameState
+    // Passer au joueur suivant et avancer la notion de "tour" (pour maturations)
+    this.currentPlayer = (this.currentPlayer + 1) % 2;
+    this.turnCount++;
+
+    // Traiter les expansions et captures qui arrivent à ce tour
+    const { expansions, captures } = this.processExpansions();
+
+    // Recompter le territoire et vérifier une fin de partie
+    this.updateTerritoryCount();
+    const winner = this.checkWinCondition();
+    if (winner) {
+      this.gameState = 'finished';
+
+      // Broadcasts fin de partie
+      this.broadcastToPlayers(io, 'turn-changed', this.getCurrentPlayerData());
+      if (expansions.length > 0) {
+        this.broadcastToPlayers(io, 'expansion-occurred', {
+          expansions,
+          gameState: this.getCurrentPlayerData().gameState
+        });
+      }
+      if (captures.length > 0) {
+        this.broadcastToPlayers(io, 'capture-occurred', {
+          captures,
+          gameState: this.getCurrentPlayerData().gameState
+        });
+      }
+
+      this.broadcastToPlayers(io, 'game-end', {
+        winner: winner.playerId,
+        reason: winner.reason,
+        territoryPercentage: winner.percentage
+      });
+
+      activeGames.delete(this.gameId);
+      this.clearTurnTimer();
+      return;
     }
-  };
-}
 
-startTurnTimer(io) {
-  this.clearTurnTimer();
+    // Broadcast des changements d'état
+    this.broadcastToPlayers(io, 'turn-changed', this.getCurrentPlayerData());
 
-  let timeLeft = 15;
-  this.turnTimer = setInterval(() => {
-    timeLeft--;
+    if (expansions.length > 0) {
+      this.broadcastToPlayers(io, 'expansion-occurred', {
+        expansions,
+        gameState: this.getCurrentPlayerData().gameState
+      });
+    }
 
-    // Broadcast du timer à tous les joueurs de cette partie
+    if (captures.length > 0) {
+      this.broadcastToPlayers(io, 'capture-occurred', {
+        captures,
+        gameState: this.getCurrentPlayerData().gameState
+      });
+    }
+
+    // Démarrer le timer pour le prochain joueur (ou IA)
+    this.startTurnTimer(io);
+  }
+
+  broadcastToPlayers(io, event, data) {
     this.players.forEach(player => {
       const socket = connectedPlayers.get(player.id);
       if (socket) {
-        socket.emit('turn-timer', { timeLeft });
+        socket.emit(event, data);
       }
     });
-
-    if (timeLeft <= 0) {
-      this.clearTurnTimer();
-      this.handleTurnTimeout(io);
-    }
-  }, 1000);
-}
-
-clearTurnTimer() {
-  if (this.turnTimer) {
-    clearInterval(this.turnTimer);
-    this.turnTimer = null;
   }
-}
-
-handleTurnTimeout(io) {
-  console.log(`⏰ Timeout pour le joueur ${this.players[this.currentPlayer].id}`);
-
-  // Passer au joueur suivant
-  this.currentPlayer = (this.currentPlayer + 1) % 2;
-  this.turnCount++;
-
-  // Traiter les expansions
-  const { expansions, captures } = this.processExpansions();
-
-  // Broadcast des changements
-  this.broadcastToPlayers(io, 'turn-changed', this.getCurrentPlayerData());
-
-  if (expansions.length > 0) {
-    this.broadcastToPlayers(io, 'expansion-occurred', {
-      expansions,
-      gameState: this.getCurrentPlayerData().gameState
-    });
-  }
-
-  if (captures.length > 0) {
-    this.broadcastToPlayers(io, 'capture-occurred', {
-      captures,
-      gameState: this.getCurrentPlayerData().gameState
-    });
-  }
-
-  // Démarrer le timer pour le prochain joueur
-  this.startTurnTimer(io);
-}
-
-broadcastToPlayers(io, event, data) {
-  this.players.forEach(player => {
-    const socket = connectedPlayers.get(player.id);
-    if (socket) {
-      socket.emit(event, data);
-    }
-  });
-}
 }
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-console.log('🔌 Nouvelle connexion socket:', socket.id);
+  console.log('🔌 Nouvelle connexion socket:', socket.id);
 
-socket.on('join-game', async (data) => {
-  try {
-    const { playerId, playerName } = data;
+  socket.on('join-game', async (data) => {
+    try {
+      const { playerId, playerName } = data;
 
-    console.log(`🎯 ${playerName} rejoint la queue`);
+      console.log(`🎯 ${playerName} rejoint la queue`);
 
-    // Ajouter le joueur à la liste des connectés
-    connectedPlayers.set(playerId, socket);
-    socket.playerId = playerId;
-    socket.playerName = playerName;
+      // Ajouter le joueur à la liste des connectés
+      connectedPlayers.set(playerId, socket);
+      socket.playerId = playerId;
+      socket.playerName = playerName;
 
-    // Ajouter à la queue
-    gameQueue.push({ playerId, playerName, socket });
+      // Ajouter à la queue
+      gameQueue.push({ playerId, playerName, socket });
 
-    if (gameQueue.length >= 2) {
-      // Créer une nouvelle partie avec les 2 premiers joueurs
-      const player1 = gameQueue.shift();
-      const player2 = gameQueue.shift();
+      if (gameQueue.length >= 2) {
+        // Créer une nouvelle partie avec les 2 premiers joueurs
+        const player1 = gameQueue.shift();
+        const player2 = gameQueue.shift();
+
+        const gameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const players = [
+          { id: player1.playerId, playerName: player1.playerName },
+          { id: player2.playerId, playerName: player2.playerName }
+        ];
+
+        const game = new BattleDots(gameId, players);
+        activeGames.set(gameId, game);
+
+        // Assigner les sockets aux rooms
+        player1.socket.join(gameId);
+        player2.socket.join(gameId);
+
+        console.log(`🎮 Nouvelle partie Battle Dots créée: ${gameId}`);
+
+        // Envoyer les données de début de partie
+        const gameData = game.getCurrentPlayerData();
+        player1.socket.emit('game-start', gameData);
+        player2.socket.emit('game-start', gameData);
+
+        // Démarrer le timer du premier tour (ou IA si c'est son tour)
+        game.startTurnTimer(io);
+
+      } else {
+        // En attente d'un adversaire
+        socket.emit('waiting-for-opponent', {
+          queuePosition: gameQueue.length
+        });
+      }
+
+    } catch (error) {
+      console.error('Erreur join-game:', error);
+      socket.emit('error', { message: 'Erreur lors de la recherche de partie' });
+    }
+  });
+
+  // Nouveau: démarrer une partie contre l'IA
+  socket.on('play-vs-ai', (data) => {
+    try {
+      const { playerId, playerName } = data;
+      connectedPlayers.set(playerId, socket);
+      socket.playerId = playerId;
+      socket.playerName = playerName;
 
       const gameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const aiId = `AI_${gameId}`;
       const players = [
-        { id: player1.playerId, playerName: player1.playerName },
-        { id: player2.playerId, playerName: player2.playerName }
+        { id: playerId, playerName },
+        { id: aiId, playerName: 'IA' }
       ];
 
       const game = new BattleDots(gameId, players);
       activeGames.set(gameId, game);
 
-      // Assigner les sockets aux rooms
-      player1.socket.join(gameId);
-      player2.socket.join(gameId);
+      socket.join(gameId);
 
-      console.log(`🎮 Nouvelle partie Battle Dots créée: ${gameId}`);
+      console.log(`🤖 Partie vs IA créée: ${gameId}`);
 
-      // Envoyer les données de début de partie
       const gameData = game.getCurrentPlayerData();
-      player1.socket.emit('game-start', gameData);
-      player2.socket.emit('game-start', gameData);
+      socket.emit('game-start', gameData);
 
-      // Démarrer le timer du premier tour
+      // Démarrer le timer (IA jouera instantané si c'est son tour)
       game.startTurnTimer(io);
-
-    } else {
-      // En attente d'un adversaire
-      socket.emit('waiting-for-opponent', {
-        queuePosition: gameQueue.length
-      });
+    } catch (error) {
+      console.error('Erreur play-vs-ai:', error);
+      socket.emit('error', { message: 'Erreur lors de la création de la partie IA' });
     }
+  });
 
-  } catch (error) {
-    console.error('Erreur join-game:', error);
-    socket.emit('error', { message: 'Erreur lors de la recherche de partie' });
-  }
-});
+  socket.on('place-dot', async (data) => {
+    try {
+      const { gameId, x, y, playerId } = data;
+      const game = activeGames.get(gameId);
 
-socket.on('place-dot', async (data) => {
-  try {
-    const { gameId, x, y, playerId } = data;
-    const game = activeGames.get(gameId);
+      if (!game) {
+        socket.emit('error', { message: 'Partie introuvable' });
+        return;
+      }
 
-    if (!game) {
-      socket.emit('error', { message: 'Partie introuvable' });
-      return;
-    }
+      console.log(`🎯 Placement dot [${x}, ${y}] par ${playerId}`);
 
-    console.log(`🎯 Placement dot [${x}, ${y}] par ${playerId}`);
+      const result = game.placeDot(x, y, playerId);
 
-    const result = game.placeDot(x, y, playerId);
+      if (!result.success) {
+        socket.emit('error', { message: result.message });
+        return;
+      }
 
-    if (!result.success) {
-      socket.emit('error', { message: result.message });
-      return;
-    }
-
-    // Arrêter le timer actuel
-    game.clearTurnTimer();
-
-    // Broadcast du placement à tous les joueurs
-    const placementData = {
-      x, y, playerId,
-      gameState: game.getCurrentPlayerData().gameState
-    };
-    game.broadcastToPlayers(io, 'dot-placed', placementData);
-
-    // Traiter les expansions
-    const { expansions, captures } = game.processExpansions();
-
-    if (expansions.length > 0) {
-      game.broadcastToPlayers(io, 'expansion-occurred', {
-        expansions,
-        gameState: game.getCurrentPlayerData().gameState
-      });
-    }
-
-    if (captures.length > 0) {
-      game.broadcastToPlayers(io, 'capture-occurred', {
-        captures,
-        gameState: game.getCurrentPlayerData().gameState
-      });
-    }
-
-    // Vérifier si la partie est terminée
-    if (result.gameEnded) {
-      console.log(`🏆 Partie ${gameId} terminée, gagnant: ${result.winner}`);
-
-      game.broadcastToPlayers(io, 'game-end', {
-        winner: result.winner,
-        reason: result.reason,
-        territoryPercentage: result.territoryPercentage
-      });
-
-      // Nettoyer la partie
-      activeGames.delete(gameId);
+      // Arrêter le timer actuel
       game.clearTurnTimer();
-    } else {
-      // Changer de tour
-      game.broadcastToPlayers(io, 'turn-changed', game.getCurrentPlayerData());
 
-      // Démarrer le timer pour le prochain tour
-      game.startTurnTimer(io);
-    }
+      // Broadcast du placement à tous les joueurs
+      const placementData = {
+        x, y, playerId,
+        gameState: game.getCurrentPlayerData().gameState
+      };
+      game.broadcastToPlayers(io, 'dot-placed', placementData);
 
-  } catch (error) {
-    console.error('Erreur place-dot:', error);
-    socket.emit('error', { message: 'Erreur lors du placement' });
-  }
-});
+      // Traiter les expansions et captures UNE SEULE FOIS ici
+      const { expansions, captures } = game.processExpansions();
 
-socket.on('cancel-search', () => {
-  try {
-    const playerId = socket.playerId;
-
-    // Retirer de la queue
-    const index = gameQueue.findIndex(player => player.playerId === playerId);
-    if (index !== -1) {
-      gameQueue.splice(index, 1);
-      console.log(`❌ ${socket.playerName} a annulé la recherche`);
-    }
-
-    // Retirer des joueurs connectés
-    connectedPlayers.delete(playerId);
-
-  } catch (error) {
-    console.error('Erreur cancel-search:', error);
-  }
-});
-
-socket.on('disconnect', (reason) => {
-  console.log(`🔌 Déconnexion: ${socket.id}, raison: ${reason}`);
-
-  try {
-    const playerId = socket.playerId;
-
-    if (playerId) {
-      // Retirer de la queue si présent
-      const queueIndex = gameQueue.findIndex(player => player.playerId === playerId);
-      if (queueIndex !== -1) {
-        gameQueue.splice(queueIndex, 1);
+      if (expansions.length > 0) {
+        game.broadcastToPlayers(io, 'expansion-occurred', {
+          expansions,
+          gameState: game.getCurrentPlayerData().gameState
+        });
       }
 
-      // Trouver la partie active du joueur
-      let playerGame = null;
-      for (const [gameId, game] of activeGames) {
-        if (game.players.some(p => p.id === playerId)) {
-          playerGame = { gameId, game };
-          break;
-        }
+      if (captures.length > 0) {
+        game.broadcastToPlayers(io, 'capture-occurred', {
+          captures,
+          gameState: game.getCurrentPlayerData().gameState
+        });
       }
 
-      if (playerGame) {
-        const { gameId, game } = playerGame;
+      // Mise à jour du territoire + condition de fin
+      game.updateTerritoryCount();
+      const winner = game.checkWinCondition();
 
-        // Notifier l'autre joueur
-        game.broadcastToPlayers(io, 'player-disconnected', {
-          playerId,
-          playerName: socket.playerName
+      if (winner) {
+        console.log(`🏆 Partie ${gameId} terminée, gagnant: ${winner.playerId}`);
+
+        game.broadcastToPlayers(io, 'game-end', {
+          winner: winner.playerId,
+          reason: winner.reason,
+          territoryPercentage: winner.percentage
         });
 
-        // Nettoyer la partie après un délai
-        setTimeout(() => {
-          if (activeGames.has(gameId)) {
-            console.log(`🧹 Nettoyage partie ${gameId} après déconnexion`);
-            game.clearTurnTimer();
+        // Nettoyer la partie
+        activeGames.delete(gameId);
+        game.clearTurnTimer();
+      } else {
+        // Changer de tour
+        game.broadcastToPlayers(io, 'turn-changed', game.getCurrentPlayerData());
 
-            game.broadcastToPlayers(io, 'player-left', {
-              playerId,
-              playerName: socket.playerName
-            });
+        // Démarrer le timer pour le prochain tour (ou IA)
+        game.startTurnTimer(io);
+      }
 
-            activeGames.delete(gameId);
-          }
-        }, 30000); // 30 secondes de grâce
+    } catch (error) {
+      console.error('Erreur place-dot:', error);
+      socket.emit('error', { message: 'Erreur lors du placement' });
+    }
+  });
+
+  socket.on('cancel-search', () => {
+    try {
+      const playerId = socket.playerId;
+
+      // Retirer de la queue
+      const index = gameQueue.findIndex(player => player.playerId === playerId);
+      if (index !== -1) {
+        gameQueue.splice(index, 1);
+        console.log(`❌ ${socket.playerName} a annulé la recherche`);
       }
 
       // Retirer des joueurs connectés
       connectedPlayers.delete(playerId);
-    }
 
-  } catch (error) {
-    console.error('Erreur lors de la déconnexion:', error);
-  }
-});
+    } catch (error) {
+      console.error('Erreur cancel-search:', error);
+    }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`🔌 Déconnexion: ${socket.id}, raison: ${reason}`);
+
+    try {
+      const playerId = socket.playerId;
+
+      if (playerId) {
+        // Retirer de la queue si présent
+        const queueIndex = gameQueue.findIndex(player => player.playerId === playerId);
+        if (queueIndex !== -1) {
+          gameQueue.splice(queueIndex, 1);
+        }
+
+        // Trouver la partie active du joueur
+        let playerGame = null;
+        for (const [gameId, game] of activeGames) {
+          if (game.players.some(p => p.id === playerId)) {
+            playerGame = { gameId, game };
+            break;
+          }
+        }
+
+        if (playerGame) {
+          const { gameId, game } = playerGame;
+
+          // Notifier l'autre joueur
+          game.broadcastToPlayers(io, 'player-disconnected', {
+            playerId,
+            playerName: socket.playerName
+          });
+
+          // Nettoyer la partie après un délai
+          setTimeout(() => {
+            if (activeGames.has(gameId)) {
+              console.log(`🧹 Nettoyage partie ${gameId} après déconnexion`);
+              game.clearTurnTimer();
+
+              game.broadcastToPlayers(io, 'player-left', {
+                playerId,
+                playerName: socket.playerName
+              });
+
+              activeGames.delete(gameId);
+            }
+          }, 30000); // 30 secondes de grâce
+        }
+
+        // Retirer des joueurs connectés
+        connectedPlayers.delete(playerId);
+      }
+
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion:', error);
+    }
+  });
 });
 
 const PORT = process.env.PORT || 5002;
 server.listen(PORT, () => {
-console.log(`🎯 Battle Dots Server running on port ${PORT}`);
+  console.log(`🎯 Battle Dots Server running on port ${PORT}`);
 });
 
 // Nettoyage périodique des parties inactives
 setInterval(() => {
-const now = Date.now();
-for (const [gameId, game] of activeGames) {
-  // Supprimer les parties inactives depuis plus de 1 heure
-  if (now - parseInt(gameId.split('_')[1]) > 3600000) {
-    console.log(`🧹 Suppression partie inactive: ${gameId}`);
-    game.clearTurnTimer();
-    activeGames.delete(gameId);
+  const now = Date.now();
+  for (const [gameId, game] of activeGames) {
+    // Supprimer les parties inactives depuis plus de 1 heure
+    if (now - parseInt(gameId.split('_')[1]) > 3600000) {
+      console.log(`🧹 Suppression partie inactive: ${gameId}`);
+      game.clearTurnTimer();
+      activeGames.delete(gameId);
+    }
   }
-}
 }, 300000); // Vérification toutes les 5 minutes

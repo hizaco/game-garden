@@ -1,0 +1,64 @@
+/* Touch-friendly and responsive tweaks */
+:root {
+  --cell-size: 9vmin;
+  --cell-size-mobile: 10vmin;
+  --gap: 6px;
+}
+
+#game-board {
+  display: grid;
+  grid-template-columns: repeat(10, var(--cell-size));
+  grid-template-rows: repeat(10, var(--cell-size));
+  gap: var(--gap);
+  touch-action: manipulation;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--cell-size) * 0.6);
+  border-radius: 10%;
+  user-select: none;
+}
+
+@media (max-width: 768px) {
+  #game-board {
+    grid-template-columns: repeat(10, var(--cell-size-mobile));
+    grid-template-rows: repeat(10, var(--cell-size-mobile));
+    gap: 4px;
+  }
+  .cell {
+    font-size: calc(var(--cell-size-mobile) * 0.6);
+  }
+  .toolbar, .side-panels {
+    padding: 8px;
+  }
+  button, .btn {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 16px;
+  }
+}
+
+/* Timer bar visual states */
+#timer-bar.warning { background: #ffb020; }
+#timer-bar.danger { background: #ff453a; }
+
+/* Simple modal fallback styles (if not present) */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+}
+.modal .modal-card {
+  max-width: 520px;
+  width: 92%;
+  margin: 8vh auto;
+  background: #121826;
+  color: #fff;
+  border-radius: 12px;
+  padding: 16px;
+}

@@ -1,0 +1,30 @@
+<div id="mode-modal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <h3>Choix du mode</h3>
+      <button class="modal-close btn" data-modal-close aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="row">
+        <input type="radio" id="mode-multiplayer" name="mode" checked>
+        <span>Multijoueur (en ligne)</span>
+      </label>
+      <label class="row">
+        <input type="radio" id="mode-solo" name="mode">
+        <span>Solo vs IA</span>
+      </label>
+      <div class="row">
+        <label for="difficulty-select">Difficulté (Solo):</label>
+        <select id="difficulty-select">
+          <option value="easy">Facile</option>
+          <option value="medium" selected>Moyen</option>
+          <option value="hard">Difficile</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-modal-close>Annuler</button>
+      <button id="start-game-confirm" class="btn btn-primary">Commencer</button>
+    </div>
+  </div>
+</div>

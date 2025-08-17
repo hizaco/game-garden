@@ -39,6 +39,7 @@
                 </div>
                 <div class="game-controls">
                     <button id="new-game-btn" class="btn btn-primary">🎮 Nouvelle Partie</button>
+                    <button id="ai-game-btn" class="btn btn-secondary">🤖 VS IA</button>
                     <button id="help-btn" class="btn btn-secondary">❓ Aide</button>
                     <button id="profile-btn" class="btn btn-secondary">👤 Profil</button>
                     <button id="logout-btn" class="btn btn-danger">🚪 Déconnexion</button>
@@ -71,45 +72,31 @@
                     <ul class="objectives-list">
                         <li>Contrôle 60% du territoire</li>
                         <li>OU élimine tous les dots adverses</li>
-                        <li>Cases bonus = power-ups!</li>
                     </ul>
                 </div>
 
-                <div class="powers-panel">
-                    <h3>⚡ Pouvoirs</h3>
-                    <div id="active-powers" class="powers-list">
-                        <div class="power-item disabled">
-                            <span class="power-icon">🔥</span>
-                            <span class="power-name">Double Placement</span>
-                        </div>
-                        <div class="power-item disabled">
-                            <span class="power-icon">🛡️</span>
-                            <span class="power-name">Bouclier</span>
-                        </div>
-                        <div class="power-item disabled">
-                            <span class="power-icon">💥</span>
-                            <span class="power-name">Expansion Boost</span>
-                        </div>
-                    </div>
+                <div class="players-panel">
+                    <h3>👥 Joueurs</h3>
+                    <div id="players-list" class="players-list"></div>
                 </div>
             </div>
 
-            <div class="game-board-container">
-                <div id="game-board" class="game-board">
-                    <!-- Les cellules seront générées par JS -->
-                </div>
+            <div class="game-board-wrapper">
+                <div id="game-board" class="game-board"></div>
             </div>
 
             <div class="game-sidebar right">
-                <div class="players-panel">
-                    <h3>👥 Joueurs</h3>
-                    <div id="players-list" class="players-list">
-                        <!-- Généré par JS -->
+                <div class="powers-panel">
+                    <h3>⚡ Pouvoirs</h3>
+                    <div class="powers-list">
+                        <div class="power-item disabled">Double Placement</div>
+                        <div class="power-item disabled">Bouclier</div>
+                        <div class="power-item disabled">Boost d'Expansion</div>
                     </div>
                 </div>
 
-                <div class="game-log">
-                    <h3>📝 Historique</h3>
+                <div class="log-panel">
+                    <h3>📝 Journal</h3>
                     <div id="game-log-content" class="log-content">
                         <p class="log-entry">🎮 En attente d'une partie...</p>
                     </div>
@@ -118,59 +105,44 @@
         </main>
     </div>
 
-    <!-- Modal de jeu -->
+    <!-- Modal générique -->
     <div id="game-modal" class="modal">
         <div class="modal-content">
-            <span id="modal-close" class="modal-close">&times;</span>
-            <h2 id="modal-title">Titre</h2>
+            <span class="modal-close">&times;</span>
+            <h3 id="modal-title">Titre</h3>
             <p id="modal-message">Message</p>
         </div>
     </div>
 
-    <!-- Modal d'attente -->
+    <!-- Modal attente -->
     <div id="waiting-modal" class="modal">
         <div class="modal-content">
-            <h2>🔍 Recherche d'adversaire...</h2>
-            <p>Position dans la file : <span id="queue-position">1</span></p>
-            <div class="loading-animation">
-                <div class="dot"></div>
-                <div class="dot"></div>
-                <div class="dot"></div>
-            </div>
+            <span class="modal-close">&times;</span>
+            <h3>En attente d'un adversaire</h3>
+            <p>Position dans la file: <strong id="queue-position">1</strong></p>
             <button id="cancel-search" class="btn btn-secondary">Annuler</button>
         </div>
     </div>
 
-    <!-- Modal d'aide -->
+    <!-- Modal aide (inclut Aide Pro - payante plus tard) -->
     <div id="help-modal" class="modal">
         <div class="modal-content">
             <span class="modal-close">&times;</span>
-            <h2>🎯 Comment jouer à Battle Dots</h2>
-            <div class="help-content">
-                <h3>🎮 Règles du jeu :</h3>
-                <ul>
-                    <li><strong>Objectif :</strong> Contrôle 60% du territoire ou élimine tous les dots adverses</li>
-                    <li><strong>Placement :</strong> Place un dot par tour sur une case vide</li>
-                    <li><strong>Expansion :</strong> Après 3 tours, tes dots s'étendent automatiquement</li>
-                    <li><strong>Capture :</strong> Encercle les dots adverses pour les capturer</li>
-                    <li><strong>Timer :</strong> 15 secondes maximum par tour</li>
-                </ul>
-
-                <h3>⚡ Cases spéciales :</h3>
-                <ul>
-                    <li><span style="color: gold;">🔥 Double Placement :</span> Place 2 dots au lieu d'1</li>
-                    <li><span style="color: silver;">🛡️ Bouclier :</span> Protection contre la capture</li>
-                    <li><span style="color: green;">💥 Expansion :</span> Expansion immédiate</li>
-                </ul>
-
-                <h3>🏆 Stratégies :</h3>
-                <ul>
-                    <li>Contrôle le centre pour une meilleure expansion</li>
-                    <li>Crée des formations défensives</li>
-                    <li>Utilise les coins et bords à ton avantage</li>
-                    <li>Anticipe les mouvements de ton adversaire</li>
-                </ul>
-            </div>
+            <h3>❓ Aide</h3>
+            <p>Règles de base: placez un dot sur une case vide. Au bout de 3 tours, il “mûrit” et peut s’étendre sur les cases adjacentes libres. Capturez les groupes adverses entièrement entourés pour les retourner.</p>
+            <ul>
+                <li>Victoire si vous contrôlez 60% du plateau</li>
+                <li>Ou si l’adversaire n’a plus de dots</li>
+                <li>Si la grille est pleine, majorité l’emporte (égalité = match nul)</li>
+            </ul>
+            <hr />
+            <h4>💡 Aide Pro (bientôt)</h4>
+            <ul>
+                <li>Suggestions de coups (IA)</li>
+                <li>Analyse des zones à risque</li>
+                <li>Conseils de capture et d’expansion</li>
+            </ul>
+            <button class="btn btn-primary" disabled title="Bientôt disponible">Débloquer Aide Pro (bientôt)</button>
         </div>
     </div>
 

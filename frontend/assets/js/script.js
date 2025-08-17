@@ -8,6 +8,10 @@ let isCheckingAuth = false;
 let turnTimer = null;
 let currentTurnTime = 15;
 
+// Ajouts: sélection du mode et difficulté Solo IA
+let selectedMode = 'multiplayer'; // 'multiplayer' | 'solo'
+let selectedDifficulty = 'medium'; // 'easy' | 'medium' | 'hard'
+
 // États du jeu
 const GAME_STATES = {
     WAITING: 'waiting',
@@ -50,6 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     setupEventListeners();
+    registerServiceWorker();
 });
 
 // Vérification authentification
@@ -248,6 +253,12 @@ function placeDot(x, y) {
 // Handlers des événements Socket.io
 function handleWaitingForOpponent(data) {
     console.log('⏳ En attente d\'adversaire:', data);
+
+    // En solo, pas d'attente d'adversaire
+    if (selectedMode === 'solo') {
+        return;
+    }
+
     const queuePosition = document.getElementById('queue-position');
     if (queuePosition) {
         queuePosition.textContent = data.queuePosition;
@@ -263,14 +274,19 @@ function handleGameStart(data) {
     console.log('🔍 État initial du jeu:', data.gameState);
 
     currentGameId = data.gameId;
-    gameState = data.gameState;
+    gameState = data.gameState || {};
+    // Stocker le mode depuis le serveur si fourni, sinon conserver la sélection locale
+    gameState.mode = data.mode || gameState.mode || selectedMode;
 
     closeModal();
     createGameBoardFromState(gameState);
     updateGameInterface(gameState);
     addGameLog('🎮 Partie Battle Dots commencée!');
 
-    showModal('Battle Dots!', 'La bataille pour le territoire commence!');
+    const startMsg = gameState.mode === 'solo'
+        ? 'Mode Solo IA — bonne chance!'
+        : 'La bataille pour le territoire commence!';
+    showModal('Battle Dots!', startMsg);
     setTimeout(() => {
         closeModal();
     }, 2000);
@@ -456,6 +472,9 @@ function handleGameEnd(data) {
     showModal('Fin de partie', message);
     stopTurnTimer();
     addGameLog(`🏆 ${winnerName} remporte la victoire! (${data.reason})`);
+
+    // Afficher les récompenses/stats mises à jour si dispo
+    showPostMatchRewards(data).catch(err => console.warn('Rewards fetch failed:', err));
 
     // Attendre plus longtemps avant de réinitialiser pour permettre l'analyse
     setTimeout(() => {
@@ -721,7 +740,16 @@ function createGameBoardFromState(gameState) {
 function setupEventListeners() {
     const newGameBtn = document.getElementById('new-game-btn');
     if (newGameBtn) {
-        newGameBtn.addEventListener('click', startNewGame);
+        newGameBtn.addEventListener('click', async () => {
+            try {
+                const choice = await chooseGameMode();
+                selectedMode = choice.mode;
+                selectedDifficulty = choice.difficulty;
+                startNewGame(selectedMode, selectedDifficulty);
+            } catch (e) {
+                console.log('Annulé ou échec sélection du mode:', e);
+            }
+        });
     }
 
     const helpBtn = document.getElementById('help-btn');
@@ -760,20 +788,63 @@ function setupEventListeners() {
     console.log('✅ Event listeners Battle Dots configurés');
 }
 
+// Sélection mode/difficulté (utilise un modal si présent, sinon prompts)
+function chooseGameMode() {
+    return new Promise((resolve, reject) => {
+        const modeModal = document.getElementById('mode-modal');
+        const mpRadio = document.getElementById('mode-multiplayer');
+        const soloRadio = document.getElementById('mode-solo');
+        const difficultySelect = document.getElementById('difficulty-select');
+        const startConfirm = document.getElementById('start-game-confirm');
+
+        // Si UI présente, l'utiliser
+        if (modeModal && mpRadio && soloRadio && difficultySelect && startConfirm) {
+            modeModal.style.display = 'block';
+
+            const onConfirm = () => {
+                const mode = soloRadio.checked ? 'solo' : 'multiplayer';
+                const difficulty = difficultySelect.value || 'medium';
+                modeModal.style.display = 'none';
+                startConfirm.removeEventListener('click', onConfirm);
+                resolve({ mode, difficulty });
+            };
+
+            startConfirm.addEventListener('click', onConfirm);
+        } else {
+            // Fallback prompt
+            const mode = window.confirm('Voulez-vous jouer en Solo contre l’IA ? OK = Solo, Annuler = Multijoueur')
+                ? 'solo'
+                : 'multiplayer';
+            let difficulty = 'medium';
+            if (mode === 'solo') {
+                const d = window.prompt('Choisissez la difficulté (easy|medium|hard):', 'medium');
+                if (['easy', 'medium', 'hard'].includes((d || '').toLowerCase())) {
+                    difficulty = d.toLowerCase();
+                }
+            }
+            resolve({ mode, difficulty });
+        }
+    });
+}
+
 // Fonctions d'action
-function startNewGame() {
+function startNewGame(mode = 'multiplayer', difficulty = 'medium') {
     if (!socket || !currentUser) {
         showModal('Erreur', 'Connexion requise pour jouer!');
         return;
     }
 
-    console.log('🎯 Démarrage nouvelle partie Battle Dots...');
+    console.log(`🎯 Démarrage nouvelle partie Battle Dots... (mode=${mode}, difficulty=${difficulty})`);
     resetGameUI();
 
-    socket.emit('join-game', {
+    const payload = {
         playerId: currentUser.id,
-        playerName: currentUser.username
-    });
+        playerName: currentUser.username,
+        mode,
+        difficulty
+    };
+
+    socket.emit('join-game', payload);
 }
 
 function logout() {
@@ -828,6 +899,8 @@ function showModal(title, message) {
         modalTitle.textContent = title;
         modalMessage.textContent = message;
         gameModal.style.display = 'block';
+    } else {
+        alert(`${title}\n\n${message}`);
     }
 }
 
@@ -848,6 +921,8 @@ function showHelp() {
     const helpModal = document.getElementById('help-modal');
     if (helpModal) {
         helpModal.style.display = 'block';
+    } else {
+        alert('Battle Dots - Placez des points pour étendre votre territoire. Contrôlez la majorité pour gagner.');
     }
 }
 
@@ -857,6 +932,57 @@ function getPowerName(powerType) {
         case POWER_TYPES.SHIELD: return 'Bouclier';
         case POWER_TYPES.EXPANSION_BOOST: return 'Boost d\'Expansion';
         default: return 'Pouvoir';
+    }
+}
+
+// Récompenses / Stats post-match
+async function showPostMatchRewards(gameEndData) {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        // On tente de récupérer des rewards/stats à jour
+        const res = await fetch('/api/users/me/stats', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+
+        const stats = await res.json();
+        console.log('🏅 Stats mises à jour:', stats);
+
+        // Si un modal dédié existe, l'afficher joliment
+        const rewardModal = document.getElementById('reward-modal');
+        const rewardBody = document.getElementById('reward-body');
+        if (rewardModal && rewardBody) {
+            const winRate = stats.winRate != null ? Math.round(stats.winRate * 100) : null;
+            rewardBody.innerHTML = `
+                <div class="rewards-summary">
+                    <div class="line"><strong>Parties jouées:</strong> ${stats.totalGames ?? '-'}</div>
+                    <div class="line"><strong>Victoires:</strong> ${stats.wins ?? '-'} | <strong>Défaites:</strong> ${stats.losses ?? '-'}</div>
+                    <div class="line"><strong>Win rate:</strong> ${winRate !== null ? winRate + '%' : '-'}</div>
+                    <div class="line"><strong>Série:</strong> ${stats.currentStreak ?? 0} (meilleure: ${stats.bestStreak ?? 0})</div>
+                    <div class="line"><strong>Niveau:</strong> ${stats.level ?? 1} — XP: ${stats.xp ?? 0} ${stats.nextLevelXp ? `/ ${stats.nextLevelXp}` : ''}</div>
+                    <div class="line"><strong>Coins:</strong> ${stats.coins ?? 0}</div>
+                </div>
+            `;
+            rewardModal.style.display = 'block';
+        } else {
+            // Fallback: simple info dans le log
+            addGameLog('🏅 Stats mises à jour après la partie.');
+        }
+    } catch (e) {
+        console.warn('Impossible d’afficher les récompenses:', e);
+    }
+}
+
+// PWA
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(reg => console.log('✅ Service Worker enregistré:', reg.scope))
+                .catch(err => console.warn('⚠️ Service Worker échec:', err));
+        });
     }
 }
 
