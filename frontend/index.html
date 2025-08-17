@@ -1,151 +1,106 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Battle Dots - Jeu de Stratégie Multijoueur</title>
-    <link rel="stylesheet" href="assets/css/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="/socket.io/socket.io.js"></script>
+  <meta charset="utf-8">
+  <title>Laser Game — Game Garden</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/assets/css/laser.css">
+  <link rel="stylesheet" href="/assets/css/responsive.css">
 </head>
 <body>
-    <div class="game-container">
-        <header class="game-header">
-            <div class="header-left">
-                <h1 class="game-title">🎯 Battle Dots</h1>
-                <div class="connection-status">
-                    <div id="status-indicator" class="status-indicator offline"></div>
-                    <span id="status-text">Déconnecté</span>
-                </div>
-            </div>
-
-            <div class="header-center">
-                <div class="game-info">
-                    <div class="turn-info">
-                        <span id="current-turn-text">En attente...</span>
-                        <div id="turn-timer" class="turn-timer">
-                            <div id="timer-bar" class="timer-bar"></div>
-                            <span id="timer-text">15</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="header-right">
-                <div class="player-info">
-                    <span>Joueur: <strong id="player-name">---</strong></span>
-                </div>
-                <div class="game-controls">
-                    <button id="new-game-btn" class="btn btn-primary">🎮 Nouvelle Partie</button>
-                    <button id="ai-game-btn" class="btn btn-secondary">🤖 VS IA</button>
-                    <button id="help-btn" class="btn btn-secondary">❓ Aide</button>
-                    <button id="profile-btn" class="btn btn-secondary">👤 Profil</button>
-                    <button id="logout-btn" class="btn btn-danger">🚪 Déconnexion</button>
-                </div>
-            </div>
-        </header>
-
-        <main class="game-main">
-            <div class="game-sidebar left">
-                <div class="stats-panel">
-                    <h3>🏆 Territoire</h3>
-                    <div class="territory-stats">
-                        <div class="territory-bar">
-                            <div id="player1-territory" class="territory-fill player1">
-                                <span id="player1-percentage">0%</span>
-                            </div>
-                            <div id="player2-territory" class="territory-fill player2">
-                                <span id="player2-percentage">0%</span>
-                            </div>
-                        </div>
-                        <div class="territory-labels">
-                            <span class="label-player1" id="player1-name">Joueur 1</span>
-                            <span class="label-player2" id="player2-name">Joueur 2</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="objectives-panel">
-                    <h3>🎯 Objectifs</h3>
-                    <ul class="objectives-list">
-                        <li>Contrôle 60% du territoire</li>
-                        <li>OU élimine tous les dots adverses</li>
-                    </ul>
-                </div>
-
-                <div class="players-panel">
-                    <h3>👥 Joueurs</h3>
-                    <div id="players-list" class="players-list"></div>
-                </div>
-            </div>
-
-            <div class="game-board-wrapper">
-                <div id="game-board" class="game-board"></div>
-            </div>
-
-            <div class="game-sidebar right">
-                <div class="powers-panel">
-                    <h3>⚡ Pouvoirs</h3>
-                    <div class="powers-list">
-                        <div class="power-item disabled">Double Placement</div>
-                        <div class="power-item disabled">Bouclier</div>
-                        <div class="power-item disabled">Boost d'Expansion</div>
-                    </div>
-                </div>
-
-                <div class="log-panel">
-                    <h3>📝 Journal</h3>
-                    <div id="game-log-content" class="log-content">
-                        <p class="log-entry">🎮 En attente d'une partie...</p>
-                    </div>
-                </div>
-            </div>
-        </main>
+  <header class="toolbar">
+    <div class="left">
+      <span id="status-indicator" class="status-indicator offline"></span>
+      <span id="status-text">Déconnecté</span>
     </div>
+    <div class="center">
+      <h1>Laser Game</h1>
+    </div>
+    <div class="right">
+      <span id="player-name"></span>
+      <button class="btn" id="profile-btn">Profil</button>
+      <button class="btn" id="logout-btn">Déconnexion</button>
+    </div>
+  </header>
 
-    <!-- Modal générique -->
-    <div id="game-modal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close">&times;</span>
-            <h3 id="modal-title">Titre</h3>
-            <p id="modal-message">Message</p>
+  <main class="game-layout">
+    <section class="side-panel">
+      <div class="card">
+        <button class="btn btn-primary" id="new-game-btn">Nouvelle partie</button>
+        <button class="btn" id="mode-btn">Mode: <span id="mode-label">Multijoueur</span></button>
+        <div class="row">
+          <button class="btn" id="place-slash">Placer “/”</button>
+          <button class="btn" id="place-backslash">Placer “\”</button>
+          <button class="btn" id="rotate-btn">Tourner</button>
+          <button class="btn btn-accent" id="fire-btn">Tirer</button>
         </div>
-    </div>
-
-    <!-- Modal attente -->
-    <div id="waiting-modal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close">&times;</span>
-            <h3>En attente d'un adversaire</h3>
-            <p>Position dans la file: <strong id="queue-position">1</strong></p>
-            <button id="cancel-search" class="btn btn-secondary">Annuler</button>
+        <div id="current-turn-text" class="hint">En attente...</div>
+        <div class="scores">
+          <div>P1: <span id="score-p1">0</span></div>
+          <div>P2: <span id="score-p2">0</span></div>
+          <div>Targets restantes: <span id="targets-left">-</span></div>
         </div>
-    </div>
+      </div>
+      <div class="card">
+        <h3>Aide</h3>
+        <p>Placez ou tournez des miroirs pour guider votre laser vers les cibles. Tirez pour valider.</p>
+      </div>
+    </section>
 
-    <!-- Modal aide (inclut Aide Pro - payante plus tard) -->
-    <div id="help-modal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close">&times;</span>
-            <h3>❓ Aide</h3>
-            <p>Règles de base: placez un dot sur une case vide. Au bout de 3 tours, il “mûrit” et peut s’étendre sur les cases adjacentes libres. Capturez les groupes adverses entièrement entourés pour les retourner.</p>
-            <ul>
-                <li>Victoire si vous contrôlez 60% du plateau</li>
-                <li>Ou si l’adversaire n’a plus de dots</li>
-                <li>Si la grille est pleine, majorité l’emporte (égalité = match nul)</li>
-            </ul>
-            <hr />
-            <h4>💡 Aide Pro (bientôt)</h4>
-            <ul>
-                <li>Suggestions de coups (IA)</li>
-                <li>Analyse des zones à risque</li>
-                <li>Conseils de capture et d’expansion</li>
-            </ul>
-            <button class="btn btn-primary" disabled title="Bientôt disponible">Débloquer Aide Pro (bientôt)</button>
-        </div>
-    </div>
+    <section class="board-wrap">
+      <div id="game-board" class="board" aria-label="Plateau 9x9"></div>
+      <canvas id="laser-canvas" width="900" height="900" class="laser-canvas" aria-hidden="true"></canvas>
+    </section>
 
-    <script src="assets/js/script.js"></script>
+    <section class="log-panel">
+      <div class="card">
+        <h3>Journal</h3>
+        <div id="game-log-content" class="log"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="game-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3 id="modal-title">Info</h3>
+        <button class="modal-close btn" data-modal-close aria-label="Fermer">×</button>
+      </div>
+      <div id="modal-message" class="modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" data-modal-close>OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mode-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3>Choix du mode</h3>
+        <button class="modal-close btn" data-modal-close aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="row"><input type="radio" name="mode" id="mode-mp" checked> Multijoueur</label>
+        <label class="row"><input type="radio" name="mode" id="mode-solo"> Solo vs IA</label>
+        <label class="row">
+          Difficulté:
+          <select id="difficulty-select">
+            <option value="easy">Facile</option>
+            <option value="medium" selected>Moyen</option>
+            <option value="hard">Difficile</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-modal-close>Annuler</button>
+        <button class="btn btn-primary" id="start-game-confirm">Commencer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="/assets/js/script.js" defer></script>
 </body>
 </html>

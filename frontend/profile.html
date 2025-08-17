@@ -1,354 +1,64 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profil - Quantum Garden</title>
-    <link rel="stylesheet" href="assets/css/style.css">
-    <link rel="stylesheet" href="assets/css/auth.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <meta charset="utf-8">
+  <title>Profil — Laser Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/assets/css/laser.css">
+  <link rel="stylesheet" href="/assets/css/responsive.css">
 </head>
 <body>
-    <header class="game-header">
-        <div class="container">
-            <h1 class="game-title">🌌 Quantum Garden</h1>
-            <div class="user-info">
-                <button onclick="window.location.href='/'" class="btn-secondary">🎮 Retour au jeu</button>
-                <button id="logout-btn" class="btn-secondary">Déconnexion</button>
-            </div>
+  <header class="toolbar">
+    <button class="btn" id="back-home">← Accueil</button>
+    <h1>Mon profil</h1>
+  </header>
+  <main class="game-layout" style="grid-template-columns: 1fr;">
+    <section class="card">
+      <h2>Éditer</h2>
+      <form id="profile-form" novalidate>
+        <div class="row">
+          <label for="username" style="width:160px;">Nom d’utilisateur</label>
+          <input id="username" required>
         </div>
-    </header>
-
-    <main class="container" style="padding: 2rem 20px;">
-        <div class="profile-container">
-            <div class="profile-card">
-                <h2>👤 Mon Profil</h2>
-
-                <div class="profile-info">
-                    <div class="info-group">
-                        <label>Nom d'utilisateur:</label>
-                        <span id="username">Chargement...</span>
-                        <button id="edit-username" class="btn-link">Modifier</button>
-                    </div>
-
-                    <div class="info-group">
-                        <label>Email:</label>
-                        <span id="email">Chargement...</span>
-                    </div>
-
-                    <div class="info-group">
-                        <label>Membre depuis:</label>
-                        <span id="member-since">Chargement...</span>
-                    </div>
-                </div>
-
-                <div class="edit-form" id="edit-form" style="display: none;">
-                    <div class="form-group">
-                        <label for="new-username">Nouveau nom d'utilisateur:</label>
-                        <input type="text" id="new-username" minlength="3" maxlength="20">
-                    </div>
-                    <div class="modal-actions">
-                        <button id="save-username" class="btn-primary">Sauvegarder</button>
-                        <button id="cancel-edit" class="btn-secondary">Annuler</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="stats-card">
-                <h2>📊 Statistiques</h2>
-
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <span class="stat-number" id="games-played">0</span>
-                        <span class="stat-label">Parties jouées</span>
-                    </div>
-
-                    <div class="stat-item">
-                        <span class="stat-number" id="games-won">0</span>
-                        <span class="stat-label">Victoires</span>
-                    </div>
-
-                    <div class="stat-item">
-                        <span class="stat-number" id="win-rate">0%</span>
-                        <span class="stat-label">Taux de victoire</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="leaderboard-card">
-                <h2>🏆 Classement</h2>
-                <div id="leaderboard" class="leaderboard">
-                    <div class="loading-spinner"></div>
-                </div>
-            </div>
-
-            <div class="danger-zone">
-                <h2>⚠️ Zone de danger</h2>
-                <p>Cette action est irréversible.</p>
-                <button id="delete-account" class="btn-danger">Supprimer le compte</button>
-            </div>
+        <div class="row">
+          <label for="displayName" style="width:160px;">Nom d’affichage</label>
+          <input id="displayName">
         </div>
-    </main>
-
-    <!-- Modal de confirmation -->
-    <div id="confirm-modal" class="modal">
-        <div class="modal-content">
-            <h2 id="confirm-title">Confirmation</h2>
-            <p id="confirm-message">Êtes-vous sûr ?</p>
-            <div class="modal-actions">
-                <button id="confirm-yes" class="btn-primary">Oui</button>
-                <button id="confirm-no" class="btn-secondary">Non</button>
-            </div>
+        <div class="row">
+          <label for="avatar" style="width:160px;">Avatar URL</label>
+          <input id="avatar" inputmode="url">
         </div>
-    </div>
+        <div class="row" style="align-items:flex-start;">
+          <label for="bio" style="width:160px;">Bio</label>
+          <textarea id="bio" rows="3" style="flex:1;"></textarea>
+        </div>
+        <div id="profile-status" class="hint"></div>
+        <div class="row">
+          <button class="btn btn-primary" id="save-profile-btn" type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </section>
 
-    <script src="assets/js/api.js"></script>
-    <script>
-        let currentUser = null;
+    <section class="card">
+      <h2>Stats</h2>
+      <div class="scores" style="grid-template-columns: repeat(3,1fr);">
+        <div><strong>Jouées</strong><div id="stats-totalGames">-</div></div>
+        <div><strong>Victoires</strong><div id="stats-wins">-</div></div>
+        <div><strong>Défaites</strong><div id="stats-losses">-</div></div>
+        <div><strong>Win rate</strong><div id="stats-winRate">-</div></div>
+        <div><strong>Série</strong><div id="stats-currentStreak">-</div></div>
+        <div><strong>Meilleure</strong><div id="stats-bestStreak">-</div></div>
+        <div><strong>Niveau</strong><div id="stats-level">-</div></div>
+        <div><strong>XP</strong><div><span id="stats-xp">-</span>/<span id="stats-nextLevelXp">-</span></div></div>
+        <div><strong>Coins</strong><div id="stats-coins">-</div></div>
+      </div>
+    </section>
+  </main>
 
-        // Initialisation
-        document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            await loadProfile();
-            await loadStats();
-            await loadLeaderboard();
-            setupEventListeners();
-        });
-
-        // Vérification auth
-        async function checkAuth() {
-            try {
-                const data = await api.verifyToken();
-                currentUser = data.user;
-            } catch (error) {
-                window.location.href = '/login';
-            }
-        }
-
-        // Charger profil
-        async function loadProfile() {
-            try {
-                const data = await api.getUserProfile();
-                document.getElementById('username').textContent = data.user.username;
-                document.getElementById('email').textContent = data.user.email;
-                document.getElementById('member-since').textContent =
-                    new Date(data.user.createdAt).toLocaleDateString('fr-FR');
-            } catch (error) {
-                console.error('Erreur chargement profil:', error);
-            }
-        }
-
-        // Charger stats
-        async function loadStats() {
-            try {
-                const data = await api.getGameStats();
-                document.getElementById('games-played').textContent = data.gamesPlayed;
-                document.getElementById('games-won').textContent = data.gamesWon;
-                document.getElementById('win-rate').textContent = data.winRate;
-            } catch (error) {
-                console.error('Erreur chargement stats:', error);
-            }
-        }
-
-        // Charger classement
-        async function loadLeaderboard() {
-            try {
-                const data = await api.getLeaderboard();
-                const leaderboard = document.getElementById('leaderboard');
-
-                leaderboard.innerHTML = data.leaderboard.map(player => `
-                    <div class="leaderboard-item ${player.username === currentUser.username ? 'current-user' : ''}">
-                        <span class="rank">#${player.rank}</span>
-                        <span class="name">${player.username}</span>
-                        <span class="wins">${player.gamesWon} victoires</span>
-                        <span class="rate">${player.winRate}%</span>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Erreur chargement classement:', error);
-                document.getElementById('leaderboard').innerHTML =
-                    '<p>Erreur de chargement du classement</p>';
-            }
-        }
-
-        // Event listeners
-        function setupEventListeners() {
-            document.getElementById('logout-btn').addEventListener('click', () => api.logout());
-            document.getElementById('edit-username').addEventListener('click', showEditForm);
-            document.getElementById('save-username').addEventListener('click', saveUsername);
-            document.getElementById('cancel-edit').addEventListener('click', hideEditForm);
-            document.getElementById('delete-account').addEventListener('click', confirmDeleteAccount);
-            document.getElementById('confirm-yes').addEventListener('click', handleConfirmAction);
-            document.getElementById('confirm-no').addEventListener('click', closeModal);
-        }
-
-        function showEditForm() {
-            document.getElementById('edit-form').style.display = 'block';
-            document.getElementById('new-username').value = document.getElementById('username').textContent;
-        }
-
-        function hideEditForm() {
-            document.getElementById('edit-form').style.display = 'none';
-        }
-
-        async function saveUsername() {
-            const newUsername = document.getElementById('new-username').value;
-
-            if (!newUsername || newUsername.length < 3) {
-                alert('Le nom d\'utilisateur doit contenir au moins 3 caractères');
-                return;
-            }
-
-            try {
-                await api.updateUserProfile(newUsername);
-                document.getElementById('username').textContent = newUsername;
-                hideEditForm();
-                alert('Nom d\'utilisateur mis à jour !');
-            } catch (error) {
-                alert('Erreur: ' + error.message);
-            }
-        }
-
-        function confirmDeleteAccount() {
-            document.getElementById('confirm-title').textContent = 'Supprimer le compte';
-            document.getElementById('confirm-message').textContent =
-                'Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.';
-            document.getElementById('confirm-modal').style.display = 'block';
-            document.getElementById('confirm-modal').dataset.action = 'delete-account';
-        }
-
-        async function handleConfirmAction() {
-            const action = document.getElementById('confirm-modal').dataset.action;
-
-            if (action === 'delete-account') {
-                try {
-                    await api.deleteAccount();
-                    alert('Compte supprimé avec succès');
-                    window.location.href = '/login';
-                } catch (error) {
-                    alert('Erreur: ' + error.message);
-                }
-            }
-
-            closeModal();
-        }
-
-        function closeModal() {
-            document.getElementById('confirm-modal').style.display = 'none';
-        }
-    </script>
-
-    <style>
-        .profile-container {
-            max-width: 800px;
-            margin: 0 auto;
-            display: grid;
-            gap: 2rem;
-        }
-
-        .profile-card, .stats-card, .leaderboard-card, .danger-zone {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
-        .profile-card h2, .stats-card h2, .leaderboard-card h2, .danger-zone h2 {
-            color: #00ff88;
-            margin-bottom: 1.5rem;
-        }
-
-        .info-group {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-        }
-
-        .info-group label {
-            font-weight: 600;
-            min-width: 120px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-        }
-
-        .stat-item {
-            text-align: center;
-            padding: 1.5rem;
-            background: rgba(0, 255, 136, 0.1);
-            border-radius: 8px;
-            border: 1px solid rgba(0, 255, 136, 0.2);
-        }
-
-        .stat-number {
-            display: block;
-            font-size: 2rem;
-            font-weight: 900;
-            color: #00ff88;
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        .leaderboard-item {
-            display: grid;
-            grid-template-columns: 50px 1fr auto auto;
-            gap: 1rem;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            align-items: center;
-        }
-
-        .leaderboard-item.current-user {
-            background: rgba(0, 255, 136, 0.1);
-            border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-
-        .rank {
-            font-weight: 900;
-            color: #00ff88;
-        }
-
-        .btn-danger {
-            background: linear-gradient(45deg, #ff6b6b, #ff5252);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-family: 'Orbitron', monospace;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
-        }
-
-        .danger-zone {
-            border-color: rgba(255, 107, 107, 0.3);
-        }
-
-        .danger-zone h2 {
-            color: #ff6b6b;
-        }
-    </style>
+  <script>
+    document.getElementById('back-home').addEventListener('click', () => { window.location.href = '/'; });
+  </script>
+  <script src="/assets/js/profile.js" defer></script>
 </body>
 </html>

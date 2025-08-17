@@ -1,0 +1,37 @@
+:root {
+  --bg: #0b1020;
+  --panel: #121826;
+  --accent: #5ac8fa;
+  --fg: #e6eefc;
+  --cell: #1d263b;
+  --cell-border: #2a3550;
+  --p1: #7bd88f;
+  --p2: #ffb86b;
+  --target: #ff5c8a;
+  --mirror: #b9c6ff;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.toolbar { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#0d1428; position:sticky; top:0; z-index:10; }
+.status-indicator { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; background:#a00; }
+.status-indicator.online { background:#2ecc71; }
+.game-layout { display:grid; grid-template-columns: 260px 1fr 300px; gap:12px; padding:12px; }
+.card { background: var(--panel); border-radius: 10px; padding: 12px; }
+.btn { background:#233; color:#fff; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; }
+.btn-primary { background: var(--accent); color:#000; }
+.btn-accent { background:#9a7bff; }
+.board-wrap { position:relative; display:flex; align-items:center; justify-content:center; }
+.board { display:grid; grid-template-columns: repeat(9, 64px); grid-template-rows: repeat(9, 64px); gap:4px; }
+.cell { width:64px; height:64px; background: var(--cell); border:1px solid var(--cell-border); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:24px; user-select:none; }
+.cell.base.p1 { background:#13371f; border-color:#1e6a38; }
+.cell.base.p2 { background:#3a2413; border-color:#6a4a1e; }
+.cell.target { background:#3b1724; border-color:#85223f; color: var(--target); }
+.cell.mirror { color: var(--mirror); }
+.laser-canvas { position:absolute; inset:0; pointer-events:none; }
+.log { max-height: 60vh; overflow:auto; font-size: 12px; white-space: pre-line; }
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:block; }
+.modal[hidden] { display:none; }
+.modal-card { background:#121826; border-radius:12px; padding:12px; width: min(520px, 92%); margin:10vh auto; }
+.row { display:flex; align-items:center; gap:8px; margin:.4rem 0; }
+.hint { opacity:.8; margin-top:6px; }
+.scores { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }

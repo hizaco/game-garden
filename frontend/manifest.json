@@ -1,24 +1,10 @@
 {
-  "name": "Battle Dots - Game Garden",
-  "short_name": "Battle Dots",
-  "description": "Multijoueur et Solo IA – étendez votre territoire et gagnez des récompenses.",
+  "name": "Laser Game - Game Garden",
+  "short_name": "LaserGame",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
   "background_color": "#0b1020",
   "theme_color": "#5ac8fa",
   "icons": [
-    {
-      "src": "/assets/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/assets/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable any"
-    }
   ]
 }
